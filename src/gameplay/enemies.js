@@ -2,12 +2,11 @@
 import * as THREE from 'three';
 import { makeInkMaterial, setFill } from '../presentation/ink/materials.js';
 import { INK } from '../shared/ink.js';
-import { makeBody, SEE_THROUGH } from '../engine/physics.js';
+import { makeBody } from '../engine/physics.js';
 import { rand, randInt, clamp, damp, angleLerp, TAU } from '../engine/math.js';
 
 const _v = new THREE.Vector3(),
   _v2 = new THREE.Vector3(),
-  _v3 = new THREE.Vector3(),
   _d = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 
@@ -20,6 +19,7 @@ import { EnemyPerception } from './enemies/perception.js';
 import { BomberBehavior } from './enemies/bomber-behavior.js';
 import { drawEnemySeed } from './enemies/seed.js';
 import { createRangedBehavior } from './enemies/ranged-behavior.js';
+import { FlyerBehavior } from './enemies/flyer-behavior.js';
 import { EnemyNavigation } from './enemies/navigation.js';
 import { EnemyQueries } from './enemies/queries.js';
 import { ProjectileView } from '../presentation/projectiles.js';
@@ -144,9 +144,6 @@ export class EnemyManager {
       ),
       hitSpheres: model.hit.map(() => new THREE.Vector3()),
       shieldHp: T.shield ? 2 : 0,
-      flyState: 'orbit',
-      flyT: seed.flyDuration,
-      orbitDir: seed.orbitDirection,
       bossAtk: null,
       rootDetached: false,
     };
@@ -197,6 +194,30 @@ export class EnemyManager {
       strafeDirection: seed.strafeDirection,
       strafeDuration: seed.strafeDuration,
     });
+    e.flyer =
+      T.weapon === 'dive'
+        ? new FlyerBehavior(
+            T,
+            e.body,
+            e.clock,
+            {
+              center: e.center,
+              orientation: e.navigation,
+              world: this.ctx.world,
+              damageModifier: () => this.mods.damage,
+              speedModifier: () => this.mods.speed,
+              audio: this.ctx.audio,
+              stunned: () => {
+                e.state = 'stunned';
+                e.t = 0;
+              },
+              recovered: () => {
+                e.state = 'hunt';
+              },
+            },
+            { duration: seed.flyDuration, orbitDirection: seed.orbitDirection },
+          )
+        : null;
     e.animationFrame = animationFrame(e.body.vel, e.center);
     e.id = id ?? this.nextId++;
     this.byId.set(e.id, e);
@@ -257,7 +278,7 @@ export class EnemyManager {
     e.t = 0;
     e.stunDur = 1.3;
     e.navigation.invalidate();
-    e.flyState = 'stunned';
+    e.flyer?.stun();
     _d.subVectors(target, e.body.pos);
     const dist = _d.length();
     _d.divideScalar(Math.max(dist, 0.01));
@@ -521,7 +542,7 @@ export class EnemyManager {
       }
       if (e.state === 'stunned') this._hideLaser(e);
       if (e.T.flying) {
-        this._thinkFlyer(e, dt, pc, P);
+        e.flyer.update(dt, P, e.t);
         world.moveBody(e.body, dt);
       } else {
         if (e.state === 'stunned') {
@@ -1044,95 +1065,6 @@ export class EnemyManager {
     }
     if (e.perception.visible) e.navigation.heading = yawTo;
   }
-  _thinkFlyer(e, dt, pc, P) {
-    const T = e.T,
-      b = e.body,
-      ctx = this.ctx;
-    e.flyT -= dt;
-    e.clock.remaining -= dt;
-    const want = _v2;
-    if (e.flyState === 'stunned') {
-      b.vel.y -= 20 * dt;
-      if (b.onGround || e.t > 2.2) {
-        e.flyState = 'climb';
-        e.flyT = 1.2;
-        e.state = 'hunt';
-      }
-    } else if (e.flyState === 'orbit') {
-      const ang = Math.atan2(b.pos.x - pc.x, b.pos.z - pc.z) + e.orbitDir * 0.45;
-      const rad = 11;
-      want.set(
-        pc.x + Math.sin(ang) * rad,
-        pc.y + 6 + Math.sin(e.t * 1.3) * 1.5,
-        pc.z + Math.cos(ang) * rad,
-      );
-      this._flyTo(e, want, T.speed, 22, dt);
-      if (
-        e.clock.remaining <= 0 &&
-        P.alive &&
-        ctx.world.hasLineOfSight(e.center, pc, SEE_THROUGH)
-      ) {
-        e.flyState = 'dive';
-        e.flyT = 1.6;
-        e.diveHit = false;
-        this.ctx.audio.flyerDive(e.center);
-      }
-      if (Math.random() < dt * 1.5) this.ctx.audio.flyerBuzz(e.center);
-    } else if (e.flyState === 'dive') {
-      want.copy(pc);
-      this._flyTo(e, want, 16, 28, dt);
-      const d = e.center.distanceTo(pc);
-      if (d < 1.4 && !e.diveHit) {
-        e.diveHit = true;
-        if (P.tryBlockMelee(e)) {
-          e.flyState = 'stunned';
-          e.state = 'stunned';
-          e.t = 0;
-          b.vel.set(-b.vel.x * 0.3, -3, -b.vel.z * 0.3);
-        } else if (P.alive) {
-          P.takeDamage(T.dmg * this.mods.damage, e.center);
-          P.knockback(_d.copy(b.vel).normalize(), 3);
-        }
-      }
-      if (e.flyT <= 0 || e.diveHit || b.hitWall) {
-        e.flyState = 'climb';
-        e.flyT = 1.1;
-        e.clock.remaining = rand(T.cool[0], T.cool[1]);
-      }
-    } else {
-      want.set(pc.x + (b.pos.x - pc.x) * 1.5, pc.y + 8, pc.z + (b.pos.z - pc.z) * 1.5);
-      this._flyTo(e, want, T.speed, 18, dt);
-      if (e.flyT <= 0) e.flyState = 'orbit';
-    }
-    // avoid geometry: look ahead and above the ground
-    const sp = b.vel.length();
-    if (sp > 0.5) {
-      _d.copy(b.vel).divideScalar(sp);
-      const h = ctx.world.raycast(e.center, _d, 3.5);
-      if (h) {
-        b.vel.addScaledVector(h.normal, 14 * dt);
-        b.vel.y += 12 * dt;
-      }
-    }
-    const g = ctx.world.raycast(e.center, _v3.set(0, -1, 0), 2.5);
-    if (g) b.vel.y += 12 * dt;
-    _d.copy(b.vel);
-    if (_d.lengthSq() > 0.1) e.navigation.heading = Math.atan2(_d.x, _d.z);
-  }
-  _flyTo(e, target, speed, accel, dt) {
-    const b = e.body;
-    _d.subVectors(target, b.pos);
-    const l = _d.length();
-    if (l < 0.3) {
-      b.vel.multiplyScalar(Math.max(0, 1 - 4 * dt));
-      return;
-    }
-    _d.divideScalar(l).multiplyScalar(speed * this.mods.speed);
-    _v3.subVectors(_d, b.vel);
-    const m = _v3.length();
-    if (m > accel * dt) _v3.multiplyScalar((accel * dt) / m);
-    b.vel.add(_v3);
-  }
 
   _hideLaser(e) {
     e.telegraph.hide();
@@ -1151,7 +1083,7 @@ export class EnemyManager {
     pose.attackT = e.blade?.attackT ?? 0;
     pose.flinch = e.flinch;
     pose.state = e.state;
-    pose.flyState = e.flyState;
+    pose.flyState = e.flyer?.state ?? 'orbit';
     pose.bossAtk = e.bossAtk;
     e.animation.update(pose, dt, pc);
   }

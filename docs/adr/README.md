@@ -13,8 +13,7 @@
 | [0009](0009-presentation-ownership.md)            | Separate recipes, simulation, scheduling and presentation lifetimes | Accepted |
 | [0010](0010-player-state-ownership.md)            | Independent player state owners and explicit phase coordination     | Accepted |
 | [0011](0011-weapon-mechanics-and-presentation.md) | Independent mechanics, impact rules and weapon presentation         | Accepted |
-
-| [0012](0012-enemy-boundaries.md) | Enemy queries, projectile simulation and character presentation | Accepted |
+| [0012](0012-enemy-boundaries.md)                  | Enemy queries, projectile simulation and character presentation     | Accepted |
 
 Each decision records context, alternatives, consequences and evidence. Revisit a decision when its
 constraints change; retain superseded records so their reasoning remains available.

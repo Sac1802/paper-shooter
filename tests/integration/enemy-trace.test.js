@@ -55,7 +55,7 @@ function frame(enemy) {
     ground: enemy.body.onGround,
     yaw: number(enemy.yaw),
     boss: enemy.bossAtk,
-    fly: enemy.flyState,
+    fly: enemy.flyer?.state ?? 'orbit',
     fuse: number(enemy.bomber?.fuseT ?? -1),
     attack: number(enemy.blade?.attackT ?? 0),
     burst: enemy.ranged?.burstLeft ?? 0,

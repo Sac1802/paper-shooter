@@ -8,3 +8,8 @@ export interface DirectedEnemyMotion {
 export interface EnemyAttackClock {
   remaining: number;
 }
+
+export interface MeleeTarget {
+  tryBlockMelee(source: { center: Vector3 }): boolean;
+  takeDamage(amount: number, from: Vector3): void;
+}

@@ -4,14 +4,10 @@ import { clamp, damp, rand } from '../../engine/math.js';
 import type { BladeEnemyDefinition } from '../../domain/enemy-definitions.js';
 import type { EnemyAttackClock } from './behavior-contracts.js';
 import type { PerceivedTarget } from './perception.js';
-import type { DirectedEnemyMotion } from './behavior-contracts.js';
+import type { MeleeTarget, DirectedEnemyMotion } from './behavior-contracts.js';
 export interface MeleeEnemyMotion extends DirectedEnemyMotion {
   approachPoint(dt: number, target: Vector3, out: Vector3): Vector3;
   meleeObstacle(dt: number): void;
-}
-export interface MeleeTarget {
-  tryBlockMelee(source: { center: Vector3 }): boolean;
-  takeDamage(amount: number, from: Vector3): void;
 }
 export interface BladeActions {
   center: Vector3;

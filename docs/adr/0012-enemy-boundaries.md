@@ -24,6 +24,10 @@ would retain those dependencies.
   remain unchanged. RangedAttack owns burst and sniper aim progress, with explicit muzzle,
   cooldown, numeric target speed, projectile emit, damage modifier, laser and feedback ports.
   It receives neither actor nor manager and does not schedule asynchronous work.
+- FlyerBehavior owns orbit/dive/climb/stun mode, bounded aerial acceleration, dive hit windows
+  and geometry avoidance. It consumes body, cooldown, numeric modifiers, target combat, orientation
+  and feedback ports. It emits actor stun/recovery commands without owning population life/death.
+  The legacy transition order is retained, including a parried dive exiting into climb.
 - RangedBehavior owns gun-enemy aim, range/height routing, spacing and strafe cadence. It
   consumes body/motion, attack commands and numeric target motion/age. Mirrored aim and idle
   damping do not drive attacks. A typed seed factory keeps all nine original initialization
