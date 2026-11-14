@@ -17,16 +17,16 @@ Branch coverage is reported separately and still has room to improve in combat, 
 failure paths. Do not describe line coverage as branch coverage or lower Sonar's gate to hide a
 missing report. Sonar's own new-code/condition calculations can differ from the local total.
 
-Local whole-product measurement after `09cd612` on 2026-11-14 with the scoped integration deadline
+Local whole-product measurement at `1853e42` on 2026-11-14 with the scoped integration deadline
 below (later CI/generated reports supersede these snapshot values):
 
 | Metric                      | Result                                          |
 | --------------------------- | ----------------------------------------------- |
-| Unit/integration tests      | 193 passing, including architecture regressions |
-| Statements                  | 87.64%                                          |
-| Lines                       | 89.11%                                          |
-| Functions                   | 89.36%                                          |
-| Branches                    | 77.36%                                          |
+| Unit/integration tests      | 231 passing, including architecture regressions |
+| Statements                  | 90.12%                                          |
+| Lines                       | 91.52%                                          |
+| Functions                   | 89.96%                                          |
+| Branches                    | 80.81%                                          |
 | Production dependency audit | 0 known advisories at the time of inspection    |
 
 The generated report and latest CI run are authoritative. Test seeds are fixed so procedural
