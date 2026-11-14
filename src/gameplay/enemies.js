@@ -769,7 +769,7 @@ export class EnemyManager {
               e.state = 'stunned';
               e.t = 0;
               e.stunDur = 1.1;
-              b.vel.set((-dx / dist) * 7, 3.5, (-dz / dist) * 7);
+              b.vel.set(-nxOf(dx, dist) * 7, 3.5, -nzOf(dz, dist) * 7);
             } else P.takeDamage(T.dmg * this.mods.damage, e.center);
           } else this.ctx.audio.katanaSwing();
           e.clock.remaining = rand(T.cool[0], T.cool[1]);
@@ -782,16 +782,16 @@ export class EnemyManager {
         e.attackT = 0.55;
         e.attackHit = false;
         this.ctx.audio.lunge(e.center);
-        b.vel.x += (dx / dist) * 2.5;
-        b.vel.z += (dz / dist) * 2.5;
+        b.vel.x += nxOf(dx, dist) * 2.5;
+        b.vel.z += nzOf(dz, dist) * 2.5;
         return;
       }
       // hold at swinging distance rather than trying to stand inside the player
       if (e.perception.visible && dist < 9 && Math.abs(dy) < 1.6) {
         if (dist < T.standoff && Math.abs(dy) < 1.2) {
           const a = 24 * dt;
-          b.vel.x += clamp(-(dx / dist) * T.speed * 0.4 - b.vel.x, -a, a);
-          b.vel.z += clamp(-(dz / dist) * T.speed * 0.4 - b.vel.z, -a, a);
+          b.vel.x += clamp(-nxOf(dx, dist) * T.speed * 0.4 - b.vel.x, -a, a);
+          b.vel.z += clamp(-nzOf(dz, dist) * T.speed * 0.4 - b.vel.z, -a, a);
           e.navigation.heading = yawTo;
         } else {
           const g = dist > 4.5 ? this._approachPoint(e, dt, pp, _goal) : pp;
