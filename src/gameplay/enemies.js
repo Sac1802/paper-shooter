@@ -17,6 +17,7 @@ const nxOf = (dx, d) => dx / (d || 1),
 
 import { TYPES, STATE_CODES, STATE_NAMES } from '../domain/enemies.js';
 import { buildHumanoid, buildBomber, buildFlyer } from '../presentation/models/characters.js';
+import { EnemyNavigation } from './enemies/navigation.js';
 import { EnemyQueries } from './enemies/queries.js';
 import { ProjectileView } from '../presentation/projectiles.js';
 import { WalkerAnimation } from '../presentation/characters/walker-animation.js';
@@ -103,6 +104,7 @@ export class EnemyManager {
             ? buildFlyer(mat, solid, T)
             : buildHumanoid(mat, solid, T);
     const hw = T.flying ? 0.45 : Math.min(0.33 * T.scale, 0.9);
+    const body = makeBody(pos, hw, (T.flying ? 0.8 : 1.85) * T.scale, T.boss ? 1.2 : 0.6);
     const e = {
       type,
       T,
@@ -118,7 +120,7 @@ export class EnemyManager {
       alive: true,
       state: 'spawn',
       t: 0,
-      body: makeBody(pos, hw, (T.flying ? 0.8 : 1.85) * T.scale, T.boss ? 1.2 : 0.6),
+      body,
       center: new THREE.Vector3(),
       yaw: rand(0, TAU),
       yawT: 0,
@@ -129,10 +131,6 @@ export class EnemyManager {
       flinch: 0,
       flashT: 0,
       flashOn: false,
-      path: null,
-      pathI: 0,
-      pathT: 0,
-      pathGoal: null,
       losT: 0,
       los: false,
       cool: rand(0.6, 1.4),
@@ -142,13 +140,14 @@ export class EnemyManager {
       attackT: 0,
       attackHit: false,
       stunDur: 0,
-      stuckT: 0,
       strafeDir: Math.random() < 0.5 ? 1 : -1,
       strafeT: rand(1, 2),
       deadT: 0,
-      appAng: this._slot++ * 2.39996,
-      appR: 0,
-      appT: rand(0, 2),
+      navigation: new EnemyNavigation(
+        body,
+        { world: this.ctx.world, navigation: () => this.ctx.nav, speed: () => this.mods.speed },
+        { weapon: T.weapon, angle: this._slot++ * 2.39996, delay: rand(0, 2) },
+      ),
       keepMul: rand(0.75, 1.35),
       backoffT: 0,
       hitSpheres: model.hit.map(() => new THREE.Vector3()),
@@ -220,7 +219,7 @@ export class EnemyManager {
     e.state = 'stunned';
     e.t = 0;
     e.stunDur = 1.3;
-    e.path = null;
+    e.navigation.invalidate();
     e.flyState = 'stunned';
     _d.subVectors(target, e.body.pos);
     const dist = _d.length();
@@ -680,96 +679,20 @@ export class EnemyManager {
     }
   }
   _steer(e, dt, gx, gz, speed, accel) {
-    const b = e.body;
-    let dx = gx - b.pos.x,
-      dz = gz - b.pos.z;
-    const l = Math.hypot(dx, dz);
-    if (l < 1e-4) {
-      b.vel.x = damp(b.vel.x, 0, 8, dt);
-      b.vel.z = damp(b.vel.z, 0, 8, dt);
-      return;
-    }
-    dx /= l;
-    dz /= l;
-    const a = (b.onGround ? accel : accel * 0.3) * dt;
-    speed *= this.mods.speed;
-    b.vel.x += clamp(dx * speed - b.vel.x, -a, a);
-    b.vel.z += clamp(dz * speed - b.vel.z, -a, a);
-    e.yawT = Math.atan2(dx, dz);
+    const yaw = e.navigation.steer(gx, gz, speed, accel, dt);
+    if (yaw !== null) e.yawT = yaw;
   }
   _groundAhead(e, dx, dz) {
-    _v.set(e.body.pos.x + dx * 0.9, e.body.pos.y + 0.5, e.body.pos.z + dz * 0.9);
-    return this.ctx.world.raycast(_v, _d.set(0, -1, 0), 3.5) !== null;
+    return e.navigation.groundAhead(dx, dz);
   }
   // Each enemy heads for its own slot around the player rather than the player's exact feet,
   // so a group fans out and arrives from different sides instead of forming one conga line.
   _approachPoint(e, dt, target, out) {
-    e.appT -= dt;
-    if (e.appT <= 0) {
-      e.appT = rand(2.5, 5);
-      e.appAng += rand(-0.7, 0.7); // drift, keep the slot
-      const melee = e.T.weapon === 'blade' || e.T.weapon === 'bomb';
-      e.appR = melee ? rand(2, 4.5) : rand(4.5, 9);
-    }
-    const d = Math.hypot(target.x - e.body.pos.x, target.z - e.body.pos.z);
-    // hold a minimum standoff so they close in on their own side instead of stacking on one point
-    let r = clamp(d * 0.55, Math.min(2, d * 0.9), e.appR);
-    // while climbing to a different level the route is often a narrow ramp, and a wide offset
-    // walks them straight off the side of it, so aim much closer to the actual target
-    if (Math.abs(target.y - e.body.pos.y) > 1.5) r = Math.min(r, 1.1);
-    return out.set(target.x + Math.cos(e.appAng) * r, target.y, target.z + Math.sin(e.appAng) * r);
+    return e.navigation.approachPoint(dt, target, out);
   }
   _follow(e, dt, target, speed) {
-    const nav = this.ctx.nav,
-      b = e.body;
-    e.pathT -= dt;
-    target = this._approachPoint(e, dt, target, _goal);
-    const stale =
-      !e.path ||
-      e.pathI >= e.path.length ||
-      (e.pathT <= 0 && (!e.pathGoal || e.pathGoal.distanceTo(target) > 3.5 || !e.path.complete));
-    if (stale && (e.pathT <= 0 || !e.path)) {
-      e.pathT = 0.8 + rand(0, 0.6);
-      const p = nav.findPath(b.pos, target);
-      if (p && p.length) {
-        e.path = p;
-        e.pathI = 0;
-        e.pathGoal = target.clone();
-        while (
-          e.pathI < p.length - 1 &&
-          Math.hypot(p[e.pathI].x - b.pos.x, p[e.pathI].z - b.pos.z) < 0.7 &&
-          Math.abs(p[e.pathI].y - b.pos.y) < 1
-        )
-          e.pathI++;
-      }
-    }
-    let goal = null;
-    if (e.path && e.pathI < e.path.length) {
-      const nd = e.path[e.pathI];
-      const hd = Math.hypot(nd.x - b.pos.x, nd.z - b.pos.z);
-      if (hd < 0.5 && Math.abs(nd.y - b.pos.y) < 1.2) {
-        e.pathI++;
-        if (e.pathI < e.path.length) goal = e.path[e.pathI];
-      } else goal = nd;
-    }
-    if (!goal) goal = target;
-    this._steer(e, dt, goal.x, goal.z, speed, 40);
-    const hd = Math.hypot(goal.x - b.pos.x, goal.z - b.pos.z);
-    if (b.onGround) {
-      if (goal.y > b.pos.y + 0.6 && hd < 1.7) {
-        b.vel.y = 9;
-        b.onGround = false;
-      } else if (b.hitWall) {
-        e.stuckT += dt;
-        if (e.stuckT > 0.35 && e.stuckT < 0.4) e.pathT = 0;
-        if (e.stuckT > 0.9) {
-          b.vel.y = 9;
-          b.onGround = false;
-          e.stuckT = 0;
-          e.pathT = 0;
-        }
-      } else e.stuckT = 0;
-    }
+    const yaw = e.navigation.follow(dt, target, speed);
+    if (yaw !== null) e.yawT = yaw;
   }
   _wander(e, dt) {
     e.body.vel.x = damp(e.body.vel.x, 0, 6, dt);
@@ -884,11 +807,7 @@ export class EnemyManager {
           const g = dist > 4.5 ? this._approachPoint(e, dt, pp, _goal) : pp;
           this._steer(e, dt, g.x, g.z, T.speed, 45);
           if (b.onGround && b.hitWall) {
-            e.stuckT += dt;
-            if (e.stuckT > 0.25) {
-              b.vel.y = 9;
-              e.stuckT = 0;
-            }
+            e.navigation.meleeObstacle(dt);
           }
         }
       } else this._follow(e, dt, pp, T.speed);

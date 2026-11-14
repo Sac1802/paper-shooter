@@ -13,10 +13,11 @@ Baseline: `c74df47` on `main`. Work branch: `refactor/maintainable-game-architec
 7. Build deployment targets, document operations and record actual verification results.
 8. Review remaining size, complexity and semantic coupling; record the next extraction priorities
    and adopt a documented engineering standard with reproducible advisory reports.
-9. Implement the open review findings in focused commits, then obtain an independent quality review
-   from a subagent with a fresh context, without providing earlier conclusions. Review source for
-   best practices, clarity/style, correctness, ownership and performance; address valid findings
-   before concluding the refactor.
+9. Implement the open review findings in focused commits. The requested independent review by a
+   subagent with fresh context is deferred at the user's request (2026-11-14); do not launch it
+   until the user explicitly confirms. When authorized, provide source and review scope without
+   earlier conclusions: best practices, clarity/style, correctness, ownership and performance.
+   Address valid findings after that review. Routine implementation checks continue independently.
 
 Use focused commits in this single branch. Dependency upgrades and map redesign are separate work.
 The original upstream rights/attribution notice remains applicable to inherited source.
