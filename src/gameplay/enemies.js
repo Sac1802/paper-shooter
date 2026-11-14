@@ -26,6 +26,8 @@ const nxOf = (dx, d) => dx / (d || 1),
 
 import { TYPES, STATE_CODES, STATE_NAMES } from '../domain/enemies.js';
 import { buildHumanoid, buildBomber, buildFlyer } from '../presentation/models/characters.js';
+import { EnemyQueries } from './enemies/queries.js';
+import { ProjectileView } from '../presentation/projectiles.js';
 import { Projectiles } from './projectiles.js';
 export { BOSSES } from '../domain/waves.js';
 export { TYPES, STATE_CODES, STATE_NAMES } from '../domain/enemies.js';
@@ -34,8 +36,27 @@ export class EnemyManager {
   constructor(ctx) {
     this.ctx = ctx;
     this.enemies = [];
+    this.queries = new EnemyQueries(
+      () => this.enemies,
+      () => this.targets(),
+      ctx.world,
+    );
     this.alive = 0;
-    this.projectiles = new Projectiles(this);
+    this.projectiles = new Projectiles(
+      {
+        world: ctx.world,
+        player: () => ctx.player,
+        targets: () => this.targets(),
+        allocateId: () => this.nextId++,
+        authoritative: () => !this.mirror,
+        queries: this.queries,
+        damage: (enemy, amount, hit) => this.damage(enemy, amount, hit),
+        blast: (point, radius, damage, except) => this.blastEnemies(point, radius, damage, except),
+        effects: ctx.effects,
+        audio: ctx.audio,
+      },
+      new ProjectileView(ctx.scene, 240),
+    );
     this.onKill = null;
     this.onBoss = null;
     this._sepT = 0;
@@ -53,34 +74,10 @@ export class EnemyManager {
     return this.ctx.targets ? this.ctx.targets() : [this.ctx.player];
   }
   _pickTarget(e, dt) {
-    e.retargetT = (e.retargetT ?? 0) - dt;
-    if (e.target && e.target.alive && e.retargetT > 0) return e.target;
-    e.retargetT = 0.5;
-    let best = null,
-      bd = Infinity;
-    for (const t of this.targets()) {
-      if (!t.alive) continue;
-      const d = t.body.pos.distanceToSquared(e.body.pos);
-      if (d < bd) {
-        bd = d;
-        best = t;
-      }
-    }
-    e.target = best;
-    return best;
+    return this.queries.pickTarget(e, dt);
   }
   nearestTarget(pos) {
-    let best = null,
-      bd = Infinity;
-    for (const t of this.targets()) {
-      if (!t.alive) continue;
-      const d = t.body.pos.distanceToSquared(pos);
-      if (d < bd) {
-        bd = d;
-        best = t;
-      }
-    }
-    return best;
+    return this.queries.nearestTarget(pos);
   }
   clear() {
     for (const e of this.enemies) {
@@ -192,56 +189,13 @@ export class EnemyManager {
     return e;
   }
   nearestVisible(from, forward, cosHalf, maxDist) {
-    let best = null,
-      bestD = maxDist;
-    for (const e of this.enemies) {
-      if (!e.alive) continue;
-      _v.subVectors(e.center, from);
-      const d = _v.length();
-      if (d > bestD || d < 0.01) continue;
-      if (_v.divideScalar(d).dot(forward) < cosHalf) continue;
-      if (!this.ctx.world.hasLineOfSight(from, e.center, SEE_THROUGH)) continue;
-      best = e;
-      bestD = d;
-    }
-    return best;
+    return this.queries.nearestVisible(from, forward, cosHalf, maxDist);
   }
   raycast(o, d, maxDist, ignore = null) {
-    let best = null;
-    for (const e of this.enemies) {
-      if (!e.alive || e === ignore) continue;
-      for (let i = 0; i < e.hit.length; i++) {
-        const c = e.hitSpheres[i],
-          r = e.hit[i][1] * e.T.scale;
-        _v.subVectors(c, o);
-        const tca = _v.dot(d);
-        if (tca < 0 || tca > maxDist) continue;
-        const d2 = _v.lengthSq() - tca * tca;
-        if (d2 > r * r) continue;
-        const t = tca - Math.sqrt(r * r - d2);
-        if (t < 0) continue;
-        if (!best || t < best.dist)
-          best = {
-            enemy: e,
-            part: e.hit[i][0],
-            dist: t,
-            point: new THREE.Vector3(o.x + d.x * t, o.y + d.y * t, o.z + d.z * t),
-          };
-      }
-    }
-    return best;
+    return this.queries.raycast(o, d, maxDist, ignore);
   }
   inArc(pos, dir, range, cosHalf) {
-    const out = [];
-    for (const e of this.enemies) {
-      if (!e.alive) continue;
-      _v.subVectors(e.center, pos);
-      const d = _v.length() - (e.T.boss ? 1.2 : 0);
-      if (d > range + 0.3) continue;
-      if (d > 0.3 && _v.normalize().dot(dir) < cosHalf) continue;
-      out.push({ enemy: e, dist: d });
-    }
-    return out.sort((a, b) => a.dist - b.dist);
+    return this.queries.inArc(pos, dir, range, cosHalf);
   }
   blastEnemies(point, radius, dmg, except) {
     for (const e of this.enemies) {
@@ -1073,7 +1027,14 @@ export class EnemyManager {
           _d.divideScalar(l);
           _d.y += l * 0.012;
           _d.normalize();
-          this.projectiles.fire(_v, _d, 24, T.dmg * 0.9, e, INK.BLACK, 0.4, 1);
+          this.projectiles.fire(_v, _d, {
+            speed: 24,
+            damage: T.dmg * 0.9,
+            owner: e,
+            ink: INK.BLACK,
+            thickness: 0.4,
+            blast: 1,
+          });
           this.ctx.audio.enemyShot(e.center);
         }
         if (a.t > 1.0) {
@@ -1220,7 +1181,14 @@ export class EnemyManager {
           const base = Math.atan2(pp.x - b.pos.x, pp.z - b.pos.z);
           const an = base + (a.shots - 4) * 0.19;
           _d.set(Math.sin(an), 0.18 + rand(-0.05, 0.05), Math.cos(an)).normalize();
-          this.projectiles.fire(_v, _d, 20, T.dmg * 0.55 * this.mods.damage, e, INK.BLACK, 0.3, 1);
+          this.projectiles.fire(_v, _d, {
+            speed: 20,
+            damage: T.dmg * 0.55 * this.mods.damage,
+            owner: e,
+            ink: INK.BLACK,
+            thickness: 0.3,
+            blast: 1,
+          });
           a.shots++;
           if (a.shots === 1) this.ctx.audio.enemyShot(e.center);
         }
@@ -1471,7 +1439,13 @@ export class EnemyManager {
     _d.y += rand(-sp, sp);
     _d.z += rand(-sp, sp);
     _d.normalize();
-    this.projectiles.fire(muzzle, _d, speed, dmg * this.mods.damage, e, INK.RED, thick);
+    this.projectiles.fire(muzzle, _d, {
+      speed: speed,
+      damage: dmg * this.mods.damage,
+      owner: e,
+      ink: INK.RED,
+      thickness: thick,
+    });
     this.ctx.effects.strokeBurst(muzzle, INK.ORANGE, 4, 4, { life: 0.07, size: 0.03 });
   }
   _animateFlyer(e, dt) {
