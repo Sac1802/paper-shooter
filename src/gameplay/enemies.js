@@ -22,6 +22,7 @@ import { createRangedBehavior } from './enemies/ranged-behavior.js';
 import { FlyerBehavior } from './enemies/flyer-behavior.js';
 import { BossFeedback } from '../presentation/characters/boss-feedback.js';
 import { createBossBehavior } from './enemies/boss-factory.js';
+import { EnemyPopulation } from './enemies/population.js';
 import { EnemyNavigation } from './enemies/navigation.js';
 import { EnemyQueries } from './enemies/queries.js';
 import { ProjectileView } from '../presentation/projectiles.js';
@@ -37,20 +38,23 @@ export { TYPES, STATE_CODES, STATE_NAMES } from '../domain/enemies.js';
 export class EnemyManager {
   constructor(ctx) {
     this.ctx = ctx;
-    this.enemies = [];
+    this.population = new EnemyPopulation();
+    this.releaseEntity = (e) => {
+      e.telegraph.dispose();
+      if (!e.rootDetached) ctx.resources.release(e.root);
+    };
     this.queries = new EnemyQueries(
       () => this.enemies,
       () => this.targets(),
       ctx.world,
     );
     this.bossFeedback = new BossFeedback(ctx.effects, ctx.audio);
-    this.alive = 0;
     this.projectiles = new Projectiles(
       {
         world: ctx.world,
         player: () => ctx.player,
         targets: () => this.targets(),
-        allocateId: () => this.nextId++,
+        allocateId: () => this.population.allocateId(),
         authoritative: () => !this.mirror,
         queries: this.queries,
         damage: (enemy, amount, hit) => this.damage(enemy, amount, hit),
@@ -67,10 +71,17 @@ export class EnemyManager {
     this.mods = { speed: 1, damage: 1 };
     // mirror mode: this peer is a client; the host owns AI, physics and health, we only render
     this.mirror = false;
-    this.nextId = 1;
     this.onClientHit = null;
     this.onSpawn = null;
-    this.byId = new Map();
+  }
+  get enemies() {
+    return this.population.entries;
+  }
+  get alive() {
+    return this.population.alive;
+  }
+  get byId() {
+    return this.population.byId;
   }
   // Everyone an enemy may go after. Solo play is just the local player.
   targets() {
@@ -83,13 +94,7 @@ export class EnemyManager {
     return this.queries.nearestTarget(pos);
   }
   clear() {
-    for (const e of this.enemies) {
-      this._removeLaser(e);
-      if (!e.rootDetached) this.ctx.resources.release(e.root);
-    }
-    this.enemies.length = 0;
-    this.alive = 0;
-    this.byId.clear();
+    this.population.clear(this.releaseEntity);
     this.projectiles.clear();
   }
   spawn(type, pos, id = null) {
@@ -239,16 +244,14 @@ export class EnemyManager {
       },
     );
     e.animationFrame = animationFrame(e.body.vel, e.center);
-    e.id = id ?? this.nextId++;
-    this.byId.set(e.id, e);
+    e.id = id ?? this.population.allocateId();
     e.body.alwaysStep = true;
     if (T.flying) e.body.noSnap = true;
     e.root.position.copy(pos);
     e.root.scale.setScalar(0.001);
     this.ctx.scene.add(e.root);
     this.ctx.resources.track(e.root);
-    this.enemies.push(e);
-    this.alive++;
+    this.population.add(e);
     if (this.onSpawn && !this.mirror) this.onSpawn(e);
     this.ctx.effects.strokeBurst(
       pos.clone().add(_v.set(0, 1, 0)),
@@ -265,9 +268,7 @@ export class EnemyManager {
     return e;
   }
   count(kind) {
-    let count = 0;
-    for (const enemy of this.enemies) if (enemy.alive && enemy.type === kind) count++;
-    return count;
+    return this.population.count(kind);
   }
   spawnReady(kind, position) {
     const enemy = this.spawn(kind, position);
@@ -401,11 +402,7 @@ export class EnemyManager {
     this.ctx.game.addScore(40, 'SHIELD BROKEN');
   }
   kill(e, info) {
-    if (!e.alive) return;
-    e.alive = false;
-    e.state = 'dead';
-    e.deadT = 0;
-    this.alive--;
+    if (!this.population.markDead(e)) return;
     e.body.vel.set(0, 0, 0);
     this._removeLaser(e);
     const eff = this.ctx.effects,
@@ -521,9 +518,7 @@ export class EnemyManager {
     }
     this.blastEnemies(c, T.blast * scale, 70, e);
     if (e.alive) {
-      e.alive = false;
-      e.state = 'dead';
-      this.alive--;
+      this.population.markDead(e);
       if (this.onKill) this.onKill(e, { source: 'blast', dir: _up.clone() }, true);
     }
     this.ctx.resources.release(e.root);
@@ -612,15 +607,7 @@ export class EnemyManager {
     }
     this._separate(dt);
     this.projectiles.update(dt);
-    for (let i = this.enemies.length - 1; i >= 0; i--) {
-      const e = this.enemies[i];
-      if (!e.alive && e.deadT > 9) {
-        this._removeLaser(e);
-        if (!e.rootDetached) this.ctx.resources.release(e.root);
-        this.enemies.splice(i, 1);
-        this.byId.delete(e.id);
-      }
-    }
+    this.population.retire(9, this.releaseEntity);
   }
   // --- network mirror ---
   // Compact per-enemy state the host sends every few frames; clients ease toward it.
@@ -711,16 +698,7 @@ export class EnemyManager {
       this._syncHit(e);
     }
     this.projectiles.update(dt);
-    for (let i = this.enemies.length - 1; i >= 0; i--) {
-      const e = this.enemies[i];
-      if (!e.alive && e.deadT > 9) {
-        this._removeLaser(e);
-        if (!e.rootDetached) this.ctx.resources.release(e.root);
-        this.byId.delete(e.id);
-        this.enemies.splice(i, 1);
-        this.byId.delete(e.id);
-      }
-    }
+    this.population.retire(9, this.releaseEntity);
   }
   // the host tells us someone died; run the gore without touching scores
   killMirror(id, info) {
