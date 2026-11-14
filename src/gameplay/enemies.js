@@ -18,6 +18,8 @@ import { BladeBehavior } from './enemies/blade-behavior.js';
 import { EnemySlash } from '../presentation/characters/melee-slash.js';
 import { EnemyPerception } from './enemies/perception.js';
 import { BomberBehavior } from './enemies/bomber-behavior.js';
+import { drawEnemySeed } from './enemies/seed.js';
+import { createRangedBehavior } from './enemies/ranged-behavior.js';
 import { EnemyNavigation } from './enemies/navigation.js';
 import { EnemyQueries } from './enemies/queries.js';
 import { ProjectileView } from '../presentation/projectiles.js';
@@ -106,6 +108,7 @@ export class EnemyManager {
             : buildHumanoid(mat, solid, T);
     const hw = T.flying ? 0.45 : Math.min(0.33 * T.scale, 0.9);
     const body = makeBody(pos, hw, (T.flying ? 0.8 : 1.85) * T.scale, T.boss ? 1.2 : 0.6);
+    const seed = drawEnemySeed();
     const e = {
       type,
       T,
@@ -123,30 +126,27 @@ export class EnemyManager {
       t: 0,
       body,
       center: new THREE.Vector3(),
-      yaw: rand(0, TAU),
+      yaw: seed.yaw,
       animation: T.flying
-        ? new FlyerAnimation(model.J, rand(0, TAU))
-        : new WalkerAnimation(T, model.J, rand(0, TAU)),
+        ? new FlyerAnimation(model.J, seed.animationPhase)
+        : new WalkerAnimation(T, model.J, seed.animationPhase),
       aimAmt: 0,
       flinch: 0,
       flashT: 0,
       flashOn: false,
-      clock: { remaining: rand(0.6, 1.4) },
+      clock: { remaining: seed.cooldown },
       stunDur: 0,
-      strafeDir: Math.random() < 0.5 ? 1 : -1,
-      strafeT: rand(1, 2),
       deadT: 0,
       navigation: new EnemyNavigation(
         body,
         { world: this.ctx.world, navigation: () => this.ctx.nav, speed: () => this.mods.speed },
-        { weapon: T.weapon, angle: this._slot++ * 2.39996, delay: rand(0, 2) },
+        { weapon: T.weapon, angle: this._slot++ * 2.39996, delay: seed.formationDelay },
       ),
-      keepMul: rand(0.75, 1.35),
       hitSpheres: model.hit.map(() => new THREE.Vector3()),
       shieldHp: T.shield ? 2 : 0,
       flyState: 'orbit',
-      flyT: rand(0, 3),
-      orbitDir: Math.random() < 0.5 ? 1 : -1,
+      flyT: seed.flyDuration,
+      orbitDir: seed.orbitDirection,
       bossAtk: null,
       rootDetached: false,
     };
@@ -189,6 +189,13 @@ export class EnemyManager {
       effects: this.ctx.effects,
       emit: (position, direction, bullet) =>
         this.projectiles.fire(position, direction, { ...bullet, owner: e }),
+    });
+    e.rangedBehavior = createRangedBehavior(T, e.body, e.navigation, {
+      attack: e.ranged,
+      localSpeed: () => this.ctx.player.speed,
+      keepMultiplier: seed.keepMultiplier,
+      strafeDirection: seed.strafeDirection,
+      strafeDuration: seed.strafeDuration,
     });
     e.animationFrame = animationFrame(e.body.vel, e.center);
     e.id = id ?? this.nextId++;
@@ -578,7 +585,7 @@ export class EnemyManager {
         +e.yaw.toFixed(2),
         STATE_CODES[e.state] ?? 1,
         Math.round(e.hp),
-        +e.aimAmt.toFixed(2),
+        +(e.rangedBehavior?.aimAmt ?? e.aimAmt).toFixed(2),
         +(e.blade?.attackT ?? 0).toFixed(2),
         (e.bomber?.fuseT ?? -1) >= 0 ? 1 : 0,
         e.bossAtk ? 1 : 0,
@@ -598,7 +605,8 @@ export class EnemyManager {
         e.root.scale.setScalar(e.T.scale);
       } else if (e.state !== 'spawn') e.state = st;
       e.hp = r[6];
-      e.aimAmt = r[7];
+      if (e.rangedBehavior) e.rangedBehavior.applyAim(r[7]);
+      else e.aimAmt = r[7];
       e.blade?.applyAttackTime(r[8]);
       e.bomber?.applyFuse(r[9] ? 0.5 : -1);
       e.bossAtk = r[10] ? e.bossAtk || { kind: 'stomp', t: 0.3 } : null;
@@ -645,7 +653,8 @@ export class EnemyManager {
       e.root.position.copy(e.body.pos);
       e.root.rotation.y = e.yaw;
       this._animate(e, dt, P.center);
-      if (e.T.weapon === 'sniper') e.telegraph.setVisible(e.aimAmt > 0.9);
+      if (e.T.weapon === 'sniper')
+        e.telegraph.setVisible((e.rangedBehavior?.aimAmt ?? e.aimAmt) > 0.9);
       this._syncHit(e);
     }
     this.projectiles.update(dt);
@@ -712,23 +721,24 @@ export class EnemyManager {
     const yaw = e.navigation.steer(gx, gz, speed, accel, dt);
     if (yaw !== null) e.navigation.heading = yaw;
   }
-  _groundAhead(e, dx, dz) {
-    return e.navigation.groundAhead(dx, dz);
-  }
+
   _follow(e, dt, target, speed) {
     const yaw = e.navigation.follow(dt, target, speed);
     if (yaw !== null) e.navigation.heading = yaw;
   }
   _wander(e, dt) {
+    if (e.rangedBehavior) {
+      e.rangedBehavior.idle(dt);
+      return;
+    }
     e.body.vel.x = damp(e.body.vel.x, 0, 6, dt);
     e.body.vel.z = damp(e.body.vel.z, 0, 6, dt);
     e.aimAmt = damp(e.aimAmt, 0, 5, dt);
   }
   _think(e, dt, pp, pc, P) {
-    const T = e.T,
-      b = e.body;
+    const T = e.T;
     const sensed = e.perception.update(dt, P);
-    const { dx, dz, distance: dist, height: dy, yaw: yawTo } = sensed;
+    const { distance: dist, height: dy, yaw: yawTo } = sensed;
     e.clock.remaining -= dt;
     if (T.weapon === 'bomb') {
       e.bomber.update(dt, sensed);
@@ -743,64 +753,7 @@ export class EnemyManager {
       this._thinkBoss(e, dt, pp, pc, dist, dy, yawTo, P);
       return;
     }
-    const inRange = e.perception.visible && dist < T.range;
-    if (inRange) {
-      e.aimAmt = damp(e.aimAmt, 1, 8, dt);
-      e.navigation.heading = yawTo;
-      let mx, mz;
-      const nx = dx / dist,
-        nz = dz / dist;
-      if (T.stationary) {
-        mx = 0;
-        mz = 0;
-      } else if (dist > T.stop * e.keepMul) {
-        this._follow(e, dt, pp, T.speed * 0.8);
-        this._shoot(e, dt, pc, P);
-        e.navigation.heading = yawTo;
-        return;
-      }
-      // if the player is up on something, keep working the route up rather than strafing along
-      // a ramp edge and falling off it; they still shoot on the way
-      else if (Math.abs(dy) > 1.2) {
-        this._follow(e, dt, pp, T.speed * 0.85);
-        this._shoot(e, dt, pc);
-        e.navigation.heading = yawTo;
-        return;
-      } else if (dist < T.keep * e.keepMul) {
-        mx = -nx;
-        mz = -nz;
-      } else if (dist > T.range * 0.7 && T.weapon === 'shotgun') {
-        mx = nx;
-        mz = nz;
-      } else {
-        e.strafeT -= dt;
-        if (e.strafeT <= 0) {
-          e.strafeT = rand(0.8, 2);
-          e.strafeDir *= -1;
-        }
-        mx = -nz * e.strafeDir;
-        mz = nx * e.strafeDir;
-      }
-      const spd = T.weapon === 'shotgun' ? T.speed : T.speed * 0.5;
-      if ((mx || mz) && this._groundAhead(e, mx, mz)) {
-        const a = 30 * dt;
-        b.vel.x += clamp(mx * spd - b.vel.x, -a, a);
-        b.vel.z += clamp(mz * spd - b.vel.z, -a, a);
-      } else {
-        b.vel.x = damp(b.vel.x, 0, 8, dt);
-        b.vel.z = damp(b.vel.z, 0, 8, dt);
-      }
-      this._shoot(e, dt, pc, P);
-    } else {
-      e.aimAmt = damp(e.aimAmt, 0, 5, dt);
-      e.ranged.interrupt();
-      if (T.stationary && e.t < 5) {
-        b.vel.x = damp(b.vel.x, 0, 8, dt);
-        b.vel.z = damp(b.vel.z, 0, 8, dt);
-        e.navigation.heading = yawTo;
-      } else this._follow(e, dt, pp, T.speed);
-      if (e.perception.visible) e.navigation.heading = yawTo;
-    }
+    e.rangedBehavior.update(dt, sensed, P.speed, e.t);
   }
   _thinkBoss(e, dt, pp, pc, dist, dy, yawTo, P) {
     const T = e.T,
@@ -1180,9 +1133,7 @@ export class EnemyManager {
     if (m > accel * dt) _v3.multiplyScalar((accel * dt) / m);
     b.vel.add(_v3);
   }
-  _shoot(e, dt, pc, P = this.ctx.player) {
-    e.ranged.shoot(dt, pc, P.speed);
-  }
+
   _hideLaser(e) {
     e.telegraph.hide();
   }
@@ -1196,7 +1147,7 @@ export class EnemyManager {
     pose.yaw = e.yaw;
     pose.time = e.t;
     pose.fuseT = e.bomber?.fuseT ?? -1;
-    pose.aimAmt = e.aimAmt;
+    pose.aimAmt = e.rangedBehavior?.aimAmt ?? e.aimAmt;
     pose.attackT = e.blade?.attackT ?? 0;
     pose.flinch = e.flinch;
     pose.state = e.state;

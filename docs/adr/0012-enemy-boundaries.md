@@ -24,6 +24,11 @@ would retain those dependencies.
   remain unchanged. RangedAttack owns burst and sniper aim progress, with explicit muzzle,
   cooldown, numeric target speed, projectile emit, damage modifier, laser and feedback ports.
   It receives neither actor nor manager and does not schedule asynchronous work.
+- RangedBehavior owns gun-enemy aim, range/height routing, spacing and strafe cadence. It
+  consumes body/motion, attack commands and numeric target motion/age. Mirrored aim and idle
+  damping do not drive attacks. A typed seed factory keeps all nine original initialization
+  draws in order, including draws unused by individual archetypes, so extraction does not
+  perturb subsequent procedural geometry or AI variation.
 - BladeBehavior owns preparation, single-hit and retreat windows behind motion, cooldown, target
   combat and feedback ports. EnemySlash owns the reusable five-stroke visual telegraph endpoints.
   The pre-existing zero-distance melee division was reproduced and fixed in `741ba7a` before
