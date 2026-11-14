@@ -24,6 +24,11 @@ would retain those dependencies.
   remain unchanged. RangedAttack owns burst and sniper aim progress, with explicit muzzle,
   cooldown, numeric target speed, projectile emit, damage modifier, laser and feedback ports.
   It receives neither actor nor manager and does not schedule asynchronous work.
+- EnemyPerception owns visibility-query cadence and a borrowed target frame with distances,
+  height and heading. Eye reads and visibility are narrow capabilities. BomberBehavior owns fuse
+  state and pursuit/arming decisions; it emits flash, fuse and explosion commands while population
+  combat policy retains damage/death authority. Desired headings belong to the body navigation
+  component, so behaviors do not write the legacy actor record.
 - EnemyNavigation owns one body's route, refresh deadline, waypoint progress, formation offset and
   obstacle recovery. It consumes world rays, a live navigation-grid reader and the speed modifier;
   it returns optional headings instead of mutating an enemy record. Body creation is moved before

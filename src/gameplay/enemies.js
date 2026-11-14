@@ -10,7 +10,6 @@ const _v = new THREE.Vector3(),
   _v3 = new THREE.Vector3(),
   _d = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0),
-  _eye = new THREE.Vector3(),
   _goal = new THREE.Vector3();
 const nxOf = (dx, d) => dx / (d || 1),
   nzOf = (dz, d) => dz / (d || 1);
@@ -18,6 +17,8 @@ const nxOf = (dx, d) => dx / (d || 1),
 import { TYPES, STATE_CODES, STATE_NAMES } from '../domain/enemies.js';
 import { buildHumanoid, buildBomber, buildFlyer } from '../presentation/models/characters.js';
 import { createRangedAttack } from './enemies/ranged-attack.js';
+import { EnemyPerception } from './enemies/perception.js';
+import { BomberBehavior } from './enemies/bomber-behavior.js';
 import { EnemyNavigation } from './enemies/navigation.js';
 import { EnemyQueries } from './enemies/queries.js';
 import { ProjectileView } from '../presentation/projectiles.js';
@@ -124,7 +125,6 @@ export class EnemyManager {
       body,
       center: new THREE.Vector3(),
       yaw: rand(0, TAU),
-      yawT: 0,
       animation: T.flying
         ? new FlyerAnimation(model.J, rand(0, TAU))
         : new WalkerAnimation(T, model.J, rand(0, TAU)),
@@ -132,8 +132,6 @@ export class EnemyManager {
       flinch: 0,
       flashT: 0,
       flashOn: false,
-      losT: 0,
-      los: false,
       clock: { remaining: rand(0.6, 1.4) },
       attackT: 0,
       attackHit: false,
@@ -149,7 +147,6 @@ export class EnemyManager {
       keepMul: rand(0.75, 1.35),
       backoffT: 0,
       hitSpheres: model.hit.map(() => new THREE.Vector3()),
-      fuseT: -1,
       shieldHp: T.shield ? 2 : 0,
       flyState: 'orbit',
       flyT: rand(0, 3),
@@ -158,6 +155,21 @@ export class EnemyManager {
       rootDetached: false,
     };
     e.telegraph = new EnemyLaser(this.ctx.scene, this.ctx.resources);
+    e.perception = new EnemyPerception(e.body.pos, (out) => this.eye(e, out), this.ctx.world);
+    e.bomber =
+      T.weapon === 'bomb'
+        ? new BomberBehavior(T, e.body, e.navigation, {
+            flash: () => {
+              e.flashT = 0.02;
+              if (!e.flashOn) {
+                setFill(e.mat, true);
+                e.flashOn = true;
+              }
+            },
+            fuse: () => this.ctx.audio.fuse(e.center),
+            explode: () => this._explodeBomber(e),
+          })
+        : null;
     e.ranged = createRangedAttack(T, e.tip, e.clock, {
       center: e.center,
       damageModifier: () => this.mods.damage,
@@ -505,7 +517,7 @@ export class EnemyManager {
         this.kill(e, { source: 'fall', dir: _up.clone() });
         continue;
       }
-      e.yaw = angleLerp(e.yaw, e.yawT, 1 - Math.exp(-10 * dt));
+      e.yaw = angleLerp(e.yaw, e.navigation.heading, 1 - Math.exp(-10 * dt));
       e.root.position.copy(e.body.pos);
       e.root.rotation.y = e.yaw;
       // never let a body occupy the same space as the player
@@ -557,7 +569,7 @@ export class EnemyManager {
         Math.round(e.hp),
         +e.aimAmt.toFixed(2),
         +e.attackT.toFixed(2),
-        e.fuseT >= 0 ? 1 : 0,
+        (e.bomber?.fuseT ?? -1) >= 0 ? 1 : 0,
         e.bossAtk ? 1 : 0,
       ]);
     }
@@ -577,7 +589,7 @@ export class EnemyManager {
       e.hp = r[6];
       e.aimAmt = r[7];
       e.attackT = r[8];
-      e.fuseT = r[9] ? 0.5 : -1;
+      e.bomber?.applyFuse(r[9] ? 0.5 : -1);
       e.bossAtk = r[10] ? e.bossAtk || { kind: 'stomp', t: 0.3 } : null;
       if (e.T.boss && this.onBoss) this.onBoss(e);
     }
@@ -687,7 +699,7 @@ export class EnemyManager {
   }
   _steer(e, dt, gx, gz, speed, accel) {
     const yaw = e.navigation.steer(gx, gz, speed, accel, dt);
-    if (yaw !== null) e.yawT = yaw;
+    if (yaw !== null) e.navigation.heading = yaw;
   }
   _groundAhead(e, dx, dz) {
     return e.navigation.groundAhead(dx, dz);
@@ -699,7 +711,7 @@ export class EnemyManager {
   }
   _follow(e, dt, target, speed) {
     const yaw = e.navigation.follow(dt, target, speed);
-    if (yaw !== null) e.yawT = yaw;
+    if (yaw !== null) e.navigation.heading = yaw;
   }
   _wander(e, dt) {
     e.body.vel.x = damp(e.body.vel.x, 0, 6, dt);
@@ -710,40 +722,11 @@ export class EnemyManager {
     const T = e.T,
       b = e.body,
       ctx = this.ctx;
-    const dx = pp.x - b.pos.x,
-      dz = pp.z - b.pos.z;
-    const dist = Math.hypot(dx, dz);
-    const dy = pp.y - b.pos.y;
-    e.losT -= dt;
-    if (e.losT <= 0) {
-      e.losT = 0.12 + rand(0, 0.1);
-      e.los = ctx.world.hasLineOfSight(this.eye(e, _eye), pc, SEE_THROUGH);
-    }
+    const sensed = e.perception.update(dt, P);
+    const { dx, dz, distance: dist, height: dy, yaw: yawTo } = sensed;
     e.clock.remaining -= dt;
-    const yawTo = Math.atan2(dx, dz);
     if (T.weapon === 'bomb') {
-      if (e.fuseT >= 0) {
-        e.fuseT -= dt;
-        b.vel.x = damp(b.vel.x, 0, 4, dt);
-        b.vel.z = damp(b.vel.z, 0, 4, dt);
-        e.yawT = yawTo;
-        e.flashT = 0.02;
-        if (!e.flashOn) {
-          setFill(e.mat, true);
-          e.flashOn = true;
-        }
-        if (Math.floor(e.fuseT * 8) !== Math.floor((e.fuseT + dt) * 8))
-          this.ctx.audio.fuse(e.center);
-        if (e.fuseT <= 0) this._explodeBomber(e);
-        return;
-      }
-      if (dist < T.fuseRange && Math.abs(dy) < 2.2 && e.los) {
-        e.fuseT = T.fuse;
-        this.ctx.audio.fuse(e.center);
-        return;
-      }
-      if (e.los && dist < 12 && Math.abs(dy) < 1.5) this._steer(e, dt, pp.x, pp.z, T.speed, 45);
-      else this._follow(e, dt, pp, T.speed);
+      e.bomber.update(dt, sensed);
       return;
     }
     if (T.weapon === 'blade') {
@@ -751,7 +734,7 @@ export class EnemyManager {
       // back off after a swing instead of walking into the player
       if (e.backoffT > 0) {
         e.backoffT -= dt;
-        e.yawT = yawTo;
+        e.navigation.heading = yawTo;
         const a = 26 * dt;
         b.vel.x += clamp(-nxOf(dx, dist) * T.speed * 0.55 - b.vel.x, -a, a);
         b.vel.z += clamp(-nzOf(dz, dist) * T.speed * 0.55 - b.vel.z, -a, a);
@@ -761,7 +744,7 @@ export class EnemyManager {
         e.attackT -= dt;
         b.vel.x = damp(b.vel.x, 0, 8, dt);
         b.vel.z = damp(b.vel.z, 0, 8, dt);
-        e.yawT = yawTo;
+        e.navigation.heading = yawTo;
         if (e.attackT < 0.18 && !e.attackHit) {
           e.attackHit = true;
           // draw the arc of the swing so there is something to read and react to
@@ -795,7 +778,7 @@ export class EnemyManager {
         return;
       }
       // wind up from just outside arm's length, with a clear telegraph before the swing lands
-      if (dist < T.lunge && Math.abs(dy) < 1.7 && e.clock.remaining <= 0 && e.los) {
+      if (dist < T.lunge && Math.abs(dy) < 1.7 && e.clock.remaining <= 0 && e.perception.visible) {
         e.attackT = 0.55;
         e.attackHit = false;
         this.ctx.audio.lunge(e.center);
@@ -804,12 +787,12 @@ export class EnemyManager {
         return;
       }
       // hold at swinging distance rather than trying to stand inside the player
-      if (e.los && dist < 9 && Math.abs(dy) < 1.6) {
+      if (e.perception.visible && dist < 9 && Math.abs(dy) < 1.6) {
         if (dist < T.standoff && Math.abs(dy) < 1.2) {
           const a = 24 * dt;
           b.vel.x += clamp(-(dx / dist) * T.speed * 0.4 - b.vel.x, -a, a);
           b.vel.z += clamp(-(dz / dist) * T.speed * 0.4 - b.vel.z, -a, a);
-          e.yawT = yawTo;
+          e.navigation.heading = yawTo;
         } else {
           const g = dist > 4.5 ? this._approachPoint(e, dt, pp, _goal) : pp;
           this._steer(e, dt, g.x, g.z, T.speed, 45);
@@ -824,10 +807,10 @@ export class EnemyManager {
       this._thinkBoss(e, dt, pp, pc, dist, dy, yawTo, P);
       return;
     }
-    const inRange = e.los && dist < T.range;
+    const inRange = e.perception.visible && dist < T.range;
     if (inRange) {
       e.aimAmt = damp(e.aimAmt, 1, 8, dt);
-      e.yawT = yawTo;
+      e.navigation.heading = yawTo;
       let mx, mz;
       const nx = dx / dist,
         nz = dz / dist;
@@ -837,7 +820,7 @@ export class EnemyManager {
       } else if (dist > T.stop * e.keepMul) {
         this._follow(e, dt, pp, T.speed * 0.8);
         this._shoot(e, dt, pc, P);
-        e.yawT = yawTo;
+        e.navigation.heading = yawTo;
         return;
       }
       // if the player is up on something, keep working the route up rather than strafing along
@@ -845,7 +828,7 @@ export class EnemyManager {
       else if (Math.abs(dy) > 1.2) {
         this._follow(e, dt, pp, T.speed * 0.85);
         this._shoot(e, dt, pc);
-        e.yawT = yawTo;
+        e.navigation.heading = yawTo;
         return;
       } else if (dist < T.keep * e.keepMul) {
         mx = -nx;
@@ -878,9 +861,9 @@ export class EnemyManager {
       if (T.stationary && e.t < 5) {
         b.vel.x = damp(b.vel.x, 0, 8, dt);
         b.vel.z = damp(b.vel.z, 0, 8, dt);
-        e.yawT = yawTo;
+        e.navigation.heading = yawTo;
       } else this._follow(e, dt, pp, T.speed);
-      if (e.los) e.yawT = yawTo;
+      if (e.perception.visible) e.navigation.heading = yawTo;
     }
   }
   _thinkBoss(e, dt, pp, pc, dist, dy, yawTo, P) {
@@ -892,7 +875,7 @@ export class EnemyManager {
     if (e.bossAtk) {
       const a = e.bossAtk;
       a.t += dt;
-      e.yawT = yawTo;
+      e.navigation.heading = yawTo;
       b.vel.x = damp(b.vel.x, 0, 5, dt);
       b.vel.z = damp(b.vel.z, 0, 5, dt);
       if (a.kind === 'stomp') {
@@ -954,8 +937,8 @@ export class EnemyManager {
       }
       return;
     }
-    e.aimAmt = damp(e.aimAmt, e.los ? 1 : 0, 6, dt);
-    if (e.clock.remaining <= 0 && e.los) {
+    e.aimAmt = damp(e.aimAmt, e.perception.visible ? 1 : 0, 6, dt);
+    if (e.clock.remaining <= 0 && e.perception.visible) {
       if (dist < 7 && Math.abs(dy) < 3) {
         e.bossAtk = { kind: 'stomp', t: 0, done: false };
         this.ctx.audio.bossRoar(e.center);
@@ -966,9 +949,10 @@ export class EnemyManager {
         return;
       }
     }
-    if (e.los && dist < 14 && Math.abs(dy) < 2) this._steer(e, dt, pp.x, pp.z, T.speed, 30);
+    if (e.perception.visible && dist < 14 && Math.abs(dy) < 2)
+      this._steer(e, dt, pp.x, pp.z, T.speed, 30);
     else this._follow(e, dt, pp, T.speed);
-    if (e.los) e.yawT = yawTo;
+    if (e.perception.visible) e.navigation.heading = yawTo;
   }
   // THE ERASER: a rubber brick that charges across the ground, then scrubs the page and calls
   // in bombers. It wants to be close; keep moving and it skids past you.
@@ -982,7 +966,7 @@ export class EnemyManager {
       a.t += dt;
       if (a.kind === 'charge') {
         if (a.t < 0.7) {
-          e.yawT = yawTo;
+          e.navigation.heading = yawTo;
           b.vel.x = damp(b.vel.x, 0, 8, dt);
           b.vel.z = damp(b.vel.z, 0, 8, dt);
           if (a.t > 0.55 && !a.dir) {
@@ -1023,7 +1007,7 @@ export class EnemyManager {
           }
         }
       } else {
-        e.yawT = yawTo;
+        e.navigation.heading = yawTo;
         b.vel.x = damp(b.vel.x, 0, 6, dt);
         b.vel.z = damp(b.vel.z, 0, 6, dt);
         if (a.t > 0.9 && !a.done) {
@@ -1057,7 +1041,7 @@ export class EnemyManager {
       }
       return;
     }
-    if (e.clock.remaining <= 0 && e.los) {
+    if (e.clock.remaining <= 0 && e.perception.visible) {
       if ((e.charges || 0) % 3 === 2 && dist < 12) {
         e.bossAtk = { kind: 'rub', t: 0, done: false };
         e.charges++;
@@ -1068,20 +1052,21 @@ export class EnemyManager {
         return;
       }
     }
-    if (e.los && dist < 16 && Math.abs(dy) < 2) this._steer(e, dt, pp.x, pp.z, T.speed, 30);
+    if (e.perception.visible && dist < 16 && Math.abs(dy) < 2)
+      this._steer(e, dt, pp.x, pp.z, T.speed, 30);
     else this._follow(e, dt, pp, T.speed);
-    if (e.los) e.yawT = yawTo;
+    if (e.perception.visible) e.navigation.heading = yawTo;
   }
   // THE INKBLOT: hops around the arena, sprays fans of bursting ink, and shakes wasps loose.
   _thinkInkblot(e, dt, pp, pc, dist, dy, yawTo, P) {
     const T = e.T,
       b = e.body,
       ctx = this.ctx;
-    e.aimAmt = damp(e.aimAmt, e.los ? 1 : 0, 6, dt);
+    e.aimAmt = damp(e.aimAmt, e.perception.visible ? 1 : 0, 6, dt);
     if (e.bossAtk) {
       const a = e.bossAtk;
       a.t += dt;
-      e.yawT = yawTo;
+      e.navigation.heading = yawTo;
       b.vel.x = damp(b.vel.x, 0, 6, dt);
       b.vel.z = damp(b.vel.z, 0, 6, dt);
       if (a.kind === 'spray') {
@@ -1152,7 +1137,7 @@ export class EnemyManager {
         }
       }
     }
-    if (e.clock.remaining <= 0 && e.los) {
+    if (e.clock.remaining <= 0 && e.perception.visible) {
       if ((e.sprays || 0) % 3 === 2) {
         e.bossAtk = { kind: 'summon', t: 0, done: false };
         e.sprays++;
@@ -1164,10 +1149,11 @@ export class EnemyManager {
       }
     }
     if (!e.hopping) {
-      if (e.los && dist < 14 && Math.abs(dy) < 2) this._steer(e, dt, pp.x, pp.z, T.speed, 30);
+      if (e.perception.visible && dist < 14 && Math.abs(dy) < 2)
+        this._steer(e, dt, pp.x, pp.z, T.speed, 30);
       else this._follow(e, dt, pp, T.speed);
     }
-    if (e.los) e.yawT = yawTo;
+    if (e.perception.visible) e.navigation.heading = yawTo;
   }
   _thinkFlyer(e, dt, pc, P) {
     const T = e.T,
@@ -1242,7 +1228,7 @@ export class EnemyManager {
     const g = ctx.world.raycast(e.center, _v3.set(0, -1, 0), 2.5);
     if (g) b.vel.y += 12 * dt;
     _d.copy(b.vel);
-    if (_d.lengthSq() > 0.1) e.yawT = Math.atan2(_d.x, _d.z);
+    if (_d.lengthSq() > 0.1) e.navigation.heading = Math.atan2(_d.x, _d.z);
   }
   _flyTo(e, target, speed, accel, dt) {
     const b = e.body;
@@ -1276,7 +1262,7 @@ export class EnemyManager {
     pose.onGround = e.body.onGround;
     pose.yaw = e.yaw;
     pose.time = e.t;
-    pose.fuseT = e.fuseT;
+    pose.fuseT = e.bomber?.fuseT ?? -1;
     pose.aimAmt = e.aimAmt;
     pose.attackT = e.attackT;
     pose.flinch = e.flinch;

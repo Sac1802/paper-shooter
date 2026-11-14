@@ -56,11 +56,11 @@ function frame(enemy) {
     yaw: number(enemy.yaw),
     boss: enemy.bossAtk,
     fly: enemy.flyState,
-    fuse: number(enemy.fuseT),
+    fuse: number(enemy.bomber?.fuseT ?? -1),
     attack: number(enemy.attackT),
     burst: enemy.ranged?.burstLeft ?? 0,
     aim: number(enemy.ranged?.aimT ?? 0),
-    los: enemy.los,
+    los: enemy.perception.visible,
     nodes,
     projectiles: enemies.projectiles.list.map((projectile) => ({
       id: projectile.id,

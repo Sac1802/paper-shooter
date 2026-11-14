@@ -13,6 +13,7 @@ export interface NavigationServices {
 }
 /** Owns route, formation offset and obstacle recovery for one body. */
 export class EnemyNavigation {
+  heading = 0;
   private path: NavigationRoute | null = null;
   private index = 0;
   private deadline = 0;
@@ -58,7 +59,8 @@ export class EnemyNavigation {
     speed *= this.ports.speed();
     b.vel.x += clamp(dx * speed - b.vel.x, -a, a);
     b.vel.z += clamp(dz * speed - b.vel.z, -a, a);
-    return Math.atan2(dx, dz);
+    this.heading = Math.atan2(dx, dz);
+    return this.heading;
   }
   groundAhead(dx: number, dz: number) {
     this.origin.set(this.body.pos.x + dx * 0.9, this.body.pos.y + 0.5, this.body.pos.z + dz * 0.9);
