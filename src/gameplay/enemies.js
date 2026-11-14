@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { INK } from '../shared/ink.js';
 import { rand, clamp, angleLerp } from '../engine/math.js';
-import { STATE_CODES, STATE_NAMES } from '../domain/enemies.js';
 import { enemyDeathDecision } from '../domain/enemy-death.js';
+import { EnemyReplication } from './enemies/replication.js';
 import { EnemyActor } from './enemies/actor.js';
 import { EnemyPopulation } from './enemies/population.js';
 import { EnemyQueries } from './enemies/queries.js';
@@ -29,6 +29,11 @@ export class EnemyManager {
       ctx.world,
     );
     this.bossFeedback = new BossFeedback(ctx.effects, ctx.audio);
+    this.replication = new EnemyReplication(
+      () => this.enemies,
+      () => this.byId,
+      (enemy) => this.onBoss?.(enemy),
+    );
     this.actorServices = {
       environment: {
         scene: ctx.scene,
@@ -129,6 +134,7 @@ export class EnemyManager {
   clear() {
     this.population.clear(this.releaseEntity);
     this.projectiles.clear();
+    this.replication.clear();
   }
   spawn(type, pos, id = null) {
     const e = new EnemyActor(type, pos, this._slot++, this.actorServices),
@@ -361,46 +367,10 @@ export class EnemyManager {
   // --- network mirror ---
   // Compact per-enemy state the host sends every few frames; clients ease toward it.
   snapshot() {
-    const out = [];
-    for (const e of this.enemies) {
-      if (!e.alive) continue;
-      const b = e.body;
-      out.push([
-        e.id,
-        +b.pos.x.toFixed(2),
-        +b.pos.y.toFixed(2),
-        +b.pos.z.toFixed(2),
-        +e.yaw.toFixed(2),
-        STATE_CODES[e.state] ?? 1,
-        Math.round(e.hp),
-        +(e.rangedBehavior?.aimAmt ?? e.boss?.aimAmt ?? e.aimAmt).toFixed(2),
-        +(e.blade?.attackT ?? 0).toFixed(2),
-        (e.bomber?.fuseT ?? -1) >= 0 ? 1 : 0,
-        e.boss?.attackPose ? 1 : 0,
-      ]);
-    }
-    return out;
+    return this.replication.snapshot();
   }
-  applySnapshot(arr, now) {
-    for (const r of arr) {
-      const e = this.byId.get(r[0]);
-      if (!e || !e.alive) continue;
-      e.snapA = e.snapB || { p: e.body.pos.clone(), yaw: e.yaw, t: now - 0.08 };
-      e.snapB = { p: new THREE.Vector3(r[1], r[2], r[3]), yaw: r[4], t: now };
-      const st = STATE_NAMES[r[5]] || 'hunt';
-      if (e.state === 'spawn' && st !== 'spawn') {
-        e.state = st;
-        e.root.scale.setScalar(e.T.scale);
-      } else if (e.state !== 'spawn') e.state = st;
-      e.hp = r[6];
-      if (e.rangedBehavior) e.rangedBehavior.applyAim(r[7]);
-      else if (e.boss) e.boss.applyAim(r[7]);
-      else e.aimAmt = r[7];
-      e.blade?.applyAttackTime(r[8]);
-      e.bomber?.applyFuse(r[9] ? 0.5 : -1);
-      e.boss?.applyAttack(Boolean(r[10]));
-      if (e.T.boss && this.onBoss) this.onBoss(e);
-    }
+  applySnapshot(rows, now) {
+    this.replication.apply(rows, now);
   }
   _updateMirror(dt) {
     const now = performance.now() / 1000,
@@ -422,16 +392,7 @@ export class EnemyManager {
           e.root.scale.setScalar(e.T.scale);
         }
       }
-      if (e.snapA && e.snapB) {
-        // render 100 ms behind the newest snapshot so movement stays smooth between packets
-        const span = Math.max(0.02, e.snapB.t - e.snapA.t);
-        const k = clamp((now - 0.1 - e.snapA.t) / span, 0, 1.2);
-        _v.lerpVectors(e.snapA.p, e.snapB.p, k);
-        e.body.vel.subVectors(_v, e.body.pos).divideScalar(Math.max(dt, 1e-3)).clampLength(0, 30);
-        e.body.pos.copy(_v);
-        e.body.onGround = Math.abs(e.body.vel.y) < 0.5;
-        e.yaw = angleLerp(e.snapA.yaw, e.snapB.yaw, k);
-      }
+      this.replication.interpolate(e, dt, now);
       e.root.position.copy(e.body.pos);
       e.root.rotation.y = e.yaw;
       this._animate(e, dt, P.center);

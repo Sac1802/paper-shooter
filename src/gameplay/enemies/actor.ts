@@ -214,4 +214,30 @@ export class EnemyActor implements EnemyActorRef {
     pose.bossAtk = this.boss?.attackPose ?? null;
     this.components.animation.update(pose, dt, lookAt);
   }
+
+  get attackTime() {
+    return this.blade?.attackT ?? 0;
+  }
+  get fuseTime() {
+    return this.bomber?.fuseT ?? -1;
+  }
+  get bossAttacking() {
+    return Boolean(this.boss?.attackPose);
+  }
+  get isBoss() {
+    return Boolean(this.T.boss);
+  }
+  applyReplicaState(state: EnemyState, hp: number) {
+    if (this.state === 'spawn' && state !== 'spawn') {
+      this.state = state;
+      this.root.scale.setScalar(this.T.scale);
+    } else if (this.state !== 'spawn') this.state = state;
+    this.hp = hp;
+  }
+  applyReplicaCombat(aim: number, attack: number, fuse: boolean, boss: boolean) {
+    this.aimAmt = aim;
+    this.blade?.applyAttackTime(attack);
+    this.bomber?.applyFuse(fuse ? 0.5 : -1);
+    this.boss?.applyAttack(boss);
+  }
 }

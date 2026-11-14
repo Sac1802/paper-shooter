@@ -24,6 +24,12 @@ would retain those dependencies.
   remain unchanged. RangedAttack owns burst and sniper aim progress, with explicit muzzle,
   cooldown, numeric target speed, projectile emit, damage modifier, laser and feedback ports.
   It receives neither actor nor manager and does not schedule asynchronous work.
+- EnemyReplication owns compact snapshot projection, previous/next history, interpolation and
+  history clearing. It consumes an actor replica protocol with state/health/pose commands and
+  knows no concrete model or brain. The eleven-number tuple, 100 ms render delay, bounded
+  extrapolation and inferred velocity clamp retain the original behavior. A replica trace was
+  recorded against manager/projectiles from `1e168d2` before applying the extraction; it also
+  passes against the current code. No new enemy transport message or co-op mode is introduced.
 - EnemyActor provides the checked actor-facing surface; construction recipes connect components
   through environment, feedback and policy capabilities. The recipes receive construction data
   and lifecycle commands, not the manager or application runtime. Leaf owners receive their
@@ -98,7 +104,7 @@ ownership decisions. Narrow structural ports add explicit composition while allo
 collision/authority tests. Existing EnemyManager forwarding methods preserve actor/weapon callers
 until the remaining orchestration migration.
 
-This decision is incremental: the legacy manager capability binding, explosion/frame orchestration, flying-body death transfer and replication still remain in
+This decision is incremental: the legacy manager capability binding, explosion/frame orchestration, flying-body death transfer still remain in
 the legacy JavaScript coordinator. Checked queries/projectiles/model recipes do not imply that the
 manager or its composition is checked. R3 and R5 remain open until those responsibilities have their
 own contracts and owners.

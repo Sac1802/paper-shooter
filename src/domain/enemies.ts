@@ -3,7 +3,7 @@ import { INK } from '../shared/ink.js';
 
 export const STATE_CODES = { spawn: 0, hunt: 1, stunned: 2, dead: 3 };
 export type EnemyState = keyof typeof STATE_CODES;
-export const STATE_NAMES = ['spawn', 'hunt', 'stunned', 'dead'];
+export const STATE_NAMES = ['spawn', 'hunt', 'stunned', 'dead'] as const;
 export const TYPES = {
   grunt: {
     hp: 100,
