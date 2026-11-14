@@ -24,6 +24,10 @@ would retain those dependencies.
   remain unchanged. RangedAttack owns burst and sniper aim progress, with explicit muzzle,
   cooldown, numeric target speed, projectile emit, damage modifier, laser and feedback ports.
   It receives neither actor nor manager and does not schedule asynchronous work.
+- BladeBehavior owns preparation, single-hit and retreat windows behind motion, cooldown, target
+  combat and feedback ports. EnemySlash owns the reusable five-stroke visual telegraph endpoints.
+  The pre-existing zero-distance melee division was reproduced and fixed in `741ba7a` before
+  extraction; composed regressions retain finite motion through lunge, standoff and parry overlap.
 - EnemyPerception owns visibility-query cadence and a borrowed target frame with distances,
   height and heading. Eye reads and visibility are narrow capabilities. BomberBehavior owns fuse
   state and pursuit/arming decisions; it emits flash, fuse and explosion commands while population

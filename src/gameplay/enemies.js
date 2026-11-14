@@ -9,14 +9,13 @@ const _v = new THREE.Vector3(),
   _v2 = new THREE.Vector3(),
   _v3 = new THREE.Vector3(),
   _d = new THREE.Vector3();
-const _up = new THREE.Vector3(0, 1, 0),
-  _goal = new THREE.Vector3();
-const nxOf = (dx, d) => dx / (d || 1),
-  nzOf = (dz, d) => dz / (d || 1);
+const _up = new THREE.Vector3(0, 1, 0);
 
 import { TYPES, STATE_CODES, STATE_NAMES } from '../domain/enemies.js';
 import { buildHumanoid, buildBomber, buildFlyer } from '../presentation/models/characters.js';
 import { createRangedAttack } from './enemies/ranged-attack.js';
+import { BladeBehavior } from './enemies/blade-behavior.js';
+import { EnemySlash } from '../presentation/characters/melee-slash.js';
 import { EnemyPerception } from './enemies/perception.js';
 import { BomberBehavior } from './enemies/bomber-behavior.js';
 import { EnemyNavigation } from './enemies/navigation.js';
@@ -133,8 +132,6 @@ export class EnemyManager {
       flashT: 0,
       flashOn: false,
       clock: { remaining: rand(0.6, 1.4) },
-      attackT: 0,
-      attackHit: false,
       stunDur: 0,
       strafeDir: Math.random() < 0.5 ? 1 : -1,
       strafeT: rand(1, 2),
@@ -145,7 +142,6 @@ export class EnemyManager {
         { weapon: T.weapon, angle: this._slot++ * 2.39996, delay: rand(0, 2) },
       ),
       keepMul: rand(0.75, 1.35),
-      backoffT: 0,
       hitSpheres: model.hit.map(() => new THREE.Vector3()),
       shieldHp: T.shield ? 2 : 0,
       flyState: 'orbit',
@@ -168,6 +164,21 @@ export class EnemyManager {
             },
             fuse: () => this.ctx.audio.fuse(e.center),
             explode: () => this._explodeBomber(e),
+          })
+        : null;
+    e.slash = T.weapon === 'blade' ? new EnemySlash(this.ctx.effects) : null;
+    e.blade =
+      T.weapon === 'blade'
+        ? new BladeBehavior(T, e.body, e.navigation, e.clock, {
+            center: e.center,
+            damageModifier: () => this.mods.damage,
+            audio: this.ctx.audio,
+            slash: () => e.slash.draw(e.center, e.yaw),
+            stun: (duration) => {
+              e.state = 'stunned';
+              e.t = 0;
+              e.stunDur = duration;
+            },
           })
         : null;
     e.ranged = createRangedAttack(T, e.tip, e.clock, {
@@ -568,7 +579,7 @@ export class EnemyManager {
         STATE_CODES[e.state] ?? 1,
         Math.round(e.hp),
         +e.aimAmt.toFixed(2),
-        +e.attackT.toFixed(2),
+        +(e.blade?.attackT ?? 0).toFixed(2),
         (e.bomber?.fuseT ?? -1) >= 0 ? 1 : 0,
         e.bossAtk ? 1 : 0,
       ]);
@@ -588,7 +599,7 @@ export class EnemyManager {
       } else if (e.state !== 'spawn') e.state = st;
       e.hp = r[6];
       e.aimAmt = r[7];
-      e.attackT = r[8];
+      e.blade?.applyAttackTime(r[8]);
       e.bomber?.applyFuse(r[9] ? 0.5 : -1);
       e.bossAtk = r[10] ? e.bossAtk || { kind: 'stomp', t: 0.3 } : null;
       if (e.T.boss && this.onBoss) this.onBoss(e);
@@ -704,11 +715,6 @@ export class EnemyManager {
   _groundAhead(e, dx, dz) {
     return e.navigation.groundAhead(dx, dz);
   }
-  // Each enemy heads for its own slot around the player rather than the player's exact feet,
-  // so a group fans out and arrives from different sides instead of forming one conga line.
-  _approachPoint(e, dt, target, out) {
-    return e.navigation.approachPoint(dt, target, out);
-  }
   _follow(e, dt, target, speed) {
     const yaw = e.navigation.follow(dt, target, speed);
     if (yaw !== null) e.navigation.heading = yaw;
@@ -720,8 +726,7 @@ export class EnemyManager {
   }
   _think(e, dt, pp, pc, P) {
     const T = e.T,
-      b = e.body,
-      ctx = this.ctx;
+      b = e.body;
     const sensed = e.perception.update(dt, P);
     const { dx, dz, distance: dist, height: dy, yaw: yawTo } = sensed;
     e.clock.remaining -= dt;
@@ -731,76 +736,7 @@ export class EnemyManager {
     }
     if (T.weapon === 'blade') {
       e.aimAmt = damp(e.aimAmt, 0, 8, dt);
-      // back off after a swing instead of walking into the player
-      if (e.backoffT > 0) {
-        e.backoffT -= dt;
-        e.navigation.heading = yawTo;
-        const a = 26 * dt;
-        b.vel.x += clamp(-nxOf(dx, dist) * T.speed * 0.55 - b.vel.x, -a, a);
-        b.vel.z += clamp(-nzOf(dz, dist) * T.speed * 0.55 - b.vel.z, -a, a);
-        return;
-      }
-      if (e.attackT > 0) {
-        e.attackT -= dt;
-        b.vel.x = damp(b.vel.x, 0, 8, dt);
-        b.vel.z = damp(b.vel.z, 0, 8, dt);
-        e.navigation.heading = yawTo;
-        if (e.attackT < 0.18 && !e.attackHit) {
-          e.attackHit = true;
-          // draw the arc of the swing so there is something to read and react to
-          _v3.setFromMatrixPosition(e.tip.matrixWorld);
-          for (let i = 0; i < 5; i++) {
-            const a0 = -0.9 + i * 0.45,
-              a1 = a0 + 0.45;
-            _v.set(
-              e.center.x + Math.sin(e.yaw + a0) * 1.5,
-              e.center.y + 0.5 - i * 0.18,
-              e.center.z + Math.cos(e.yaw + a0) * 1.5,
-            );
-            _v2.set(
-              e.center.x + Math.sin(e.yaw + a1) * 1.5,
-              e.center.y + 0.5 - (i + 1) * 0.18,
-              e.center.z + Math.cos(e.yaw + a1) * 1.5,
-            );
-            ctx.effects.tracer(_v, _v2, INK.RED, 0.025, 0.16);
-          }
-          if (dist < T.reach && Math.abs(dy) < 1.7) {
-            if (P.tryBlockMelee(e)) {
-              e.state = 'stunned';
-              e.t = 0;
-              e.stunDur = 1.1;
-              b.vel.set(-nxOf(dx, dist) * 7, 3.5, -nzOf(dz, dist) * 7);
-            } else P.takeDamage(T.dmg * this.mods.damage, e.center);
-          } else this.ctx.audio.katanaSwing();
-          e.clock.remaining = rand(T.cool[0], T.cool[1]);
-          e.backoffT = rand(0.45, 0.75);
-        }
-        return;
-      }
-      // wind up from just outside arm's length, with a clear telegraph before the swing lands
-      if (dist < T.lunge && Math.abs(dy) < 1.7 && e.clock.remaining <= 0 && e.perception.visible) {
-        e.attackT = 0.55;
-        e.attackHit = false;
-        this.ctx.audio.lunge(e.center);
-        b.vel.x += nxOf(dx, dist) * 2.5;
-        b.vel.z += nzOf(dz, dist) * 2.5;
-        return;
-      }
-      // hold at swinging distance rather than trying to stand inside the player
-      if (e.perception.visible && dist < 9 && Math.abs(dy) < 1.6) {
-        if (dist < T.standoff && Math.abs(dy) < 1.2) {
-          const a = 24 * dt;
-          b.vel.x += clamp(-nxOf(dx, dist) * T.speed * 0.4 - b.vel.x, -a, a);
-          b.vel.z += clamp(-nzOf(dz, dist) * T.speed * 0.4 - b.vel.z, -a, a);
-          e.navigation.heading = yawTo;
-        } else {
-          const g = dist > 4.5 ? this._approachPoint(e, dt, pp, _goal) : pp;
-          this._steer(e, dt, g.x, g.z, T.speed, 45);
-          if (b.onGround && b.hitWall) {
-            e.navigation.meleeObstacle(dt);
-          }
-        }
-      } else this._follow(e, dt, pp, T.speed);
+      e.blade.update(dt, sensed, P);
       return;
     }
     if (T.weapon === 'boss') {
@@ -1247,9 +1183,6 @@ export class EnemyManager {
   _shoot(e, dt, pc, P = this.ctx.player) {
     e.ranged.shoot(dt, pc, P.speed);
   }
-  _showLaser(e, from, to, charge) {
-    e.telegraph.show(from, to, charge);
-  }
   _hideLaser(e) {
     e.telegraph.hide();
   }
@@ -1264,7 +1197,7 @@ export class EnemyManager {
     pose.time = e.t;
     pose.fuseT = e.bomber?.fuseT ?? -1;
     pose.aimAmt = e.aimAmt;
-    pose.attackT = e.attackT;
+    pose.attackT = e.blade?.attackT ?? 0;
     pose.flinch = e.flinch;
     pose.state = e.state;
     pose.flyState = e.flyState;

@@ -7,9 +7,7 @@ import type {
   BurstEnemyDefinition,
   SniperEnemyDefinition,
 } from '../../domain/enemy-definitions.js';
-export interface EnemyAttackClock {
-  remaining: number;
-}
+import type { EnemyAttackClock } from './behavior-contracts.js';
 export interface EnemyBullet {
   speed: number;
   damage: number;

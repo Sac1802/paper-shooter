@@ -4,3 +4,7 @@ export interface DirectedEnemyMotion {
   steer(gx: number, gz: number, speed: number, acceleration: number, dt: number): number | null;
   follow(dt: number, target: Vector3, speed: number): number | null;
 }
+
+export interface EnemyAttackClock {
+  remaining: number;
+}
