@@ -54,7 +54,7 @@ function frame(enemy) {
     vel: vector(enemy.body.vel),
     ground: enemy.body.onGround,
     yaw: number(enemy.yaw),
-    boss: enemy.bossAtk,
+    boss: enemy.boss?.attackPose ?? null,
     fly: enemy.flyer?.state ?? 'orbit',
     fuse: number(enemy.bomber?.fuseT ?? -1),
     attack: number(enemy.blade?.attackT ?? 0),

@@ -24,6 +24,12 @@ would retain those dependencies.
   remain unchanged. RangedAttack owns burst and sniper aim progress, with explicit muzzle,
   cooldown, numeric target speed, projectile emit, damage modifier, laser and feedback ports.
   It receives neither actor nor manager and does not schedule asynchronous work.
+- DoodlerBehavior, EraserBehavior and InkblotBehavior each own their attack variants, phase
+  timers/counters and aiming. They consume body/motion, shared cooldown and narrow target,
+  projectile, summon and feedback commands. BossFeedback owns stomp/charge/summon/landing
+  recipes and reusable endpoints. The compact network attack bit retains its existing approximate
+  active-phase recovery: stomp for Doodler, scrub for Eraser and summon for Inkblot. A charge
+  direction must be captured during the bounded frame loop's windup.
 - FlyerBehavior owns orbit/dive/climb/stun mode, bounded aerial acceleration, dive hit windows
   and geometry avoidance. It consumes body, cooldown, numeric modifiers, target combat, orientation
   and feedback ports. It emits actor stun/recovery commands without owning population life/death.
@@ -70,7 +76,7 @@ ownership decisions. Narrow structural ports add explicit composition while allo
 collision/authority tests. Existing EnemyManager forwarding methods preserve actor/weapon callers
 until the remaining orchestration migration.
 
-This decision is incremental: enemy AI, lifecycle and replication still remain in
+This decision is incremental: enemy population lifecycle and replication still remain in
 the legacy JavaScript coordinator. Checked queries/projectiles/model recipes do not imply that the
 manager or its composition is checked. R3 and R5 remain open until those responsibilities have their
 own contracts and owners.

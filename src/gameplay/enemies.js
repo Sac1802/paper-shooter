@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { makeInkMaterial, setFill } from '../presentation/ink/materials.js';
 import { INK } from '../shared/ink.js';
 import { makeBody } from '../engine/physics.js';
-import { rand, randInt, clamp, damp, angleLerp, TAU } from '../engine/math.js';
+import { rand, randInt, clamp, damp, angleLerp } from '../engine/math.js';
 
 const _v = new THREE.Vector3(),
   _v2 = new THREE.Vector3(),
@@ -20,6 +20,8 @@ import { BomberBehavior } from './enemies/bomber-behavior.js';
 import { drawEnemySeed } from './enemies/seed.js';
 import { createRangedBehavior } from './enemies/ranged-behavior.js';
 import { FlyerBehavior } from './enemies/flyer-behavior.js';
+import { BossFeedback } from '../presentation/characters/boss-feedback.js';
+import { createBossBehavior } from './enemies/boss-factory.js';
 import { EnemyNavigation } from './enemies/navigation.js';
 import { EnemyQueries } from './enemies/queries.js';
 import { ProjectileView } from '../presentation/projectiles.js';
@@ -41,6 +43,7 @@ export class EnemyManager {
       () => this.targets(),
       ctx.world,
     );
+    this.bossFeedback = new BossFeedback(ctx.effects, ctx.audio);
     this.alive = 0;
     this.projectiles = new Projectiles(
       {
@@ -144,7 +147,6 @@ export class EnemyManager {
       ),
       hitSpheres: model.hit.map(() => new THREE.Vector3()),
       shieldHp: T.shield ? 2 : 0,
-      bossAtk: null,
       rootDetached: false,
     };
     e.telegraph = new EnemyLaser(this.ctx.scene, this.ctx.resources);
@@ -218,6 +220,24 @@ export class EnemyManager {
             { duration: seed.flyDuration, orbitDirection: seed.orbitDirection },
           )
         : null;
+    e.boss = createBossBehavior(
+      T,
+      { body: e.body, clock: e.clock, motion: e.navigation },
+      {
+        center: e.center,
+        targets: () => this.targets(),
+        damageModifier: () => this.mods.damage,
+        speedModifier: () => this.mods.speed,
+        feedback: this.bossFeedback,
+        head: (out) => out.setFromMatrixPosition(e.parts.head.matrixWorld),
+        torso: (out) => out.setFromMatrixPosition(e.parts.torso.matrixWorld),
+        emit: (position, direction, shot) =>
+          this.projectiles.fire(position, direction, { ...shot, owner: e }),
+        blast: (position, radius, damage) => this.blastEnemies(position, radius, damage, e),
+        count: (kind) => this.count(kind),
+        spawnReady: (kind, position) => this.spawnReady(kind, position),
+      },
+    );
     e.animationFrame = animationFrame(e.body.vel, e.center);
     e.id = id ?? this.nextId++;
     this.byId.set(e.id, e);
@@ -243,6 +263,16 @@ export class EnemyManager {
       if (this.onBoss) this.onBoss(e);
     }
     return e;
+  }
+  count(kind) {
+    let count = 0;
+    for (const enemy of this.enemies) if (enemy.alive && enemy.type === kind) count++;
+    return count;
+  }
+  spawnReady(kind, position) {
+    const enemy = this.spawn(kind, position);
+    enemy.state = 'hunt';
+    enemy.root.scale.setScalar(enemy.T.scale);
   }
   nearestVisible(from, forward, cosHalf, maxDist) {
     return this.queries.nearestVisible(from, forward, cosHalf, maxDist);
@@ -547,7 +577,7 @@ export class EnemyManager {
       } else {
         if (e.state === 'stunned') {
           if (e.t > e.stunDur) e.state = 'hunt';
-        } else if (P.alive) this._think(e, dt, pp, pc, P);
+        } else if (P.alive) this._think(e, dt, P);
         else this._wander(e, dt);
         e.body.vel.y -= 24 * dt;
         world.moveBody(e.body, dt);
@@ -606,10 +636,10 @@ export class EnemyManager {
         +e.yaw.toFixed(2),
         STATE_CODES[e.state] ?? 1,
         Math.round(e.hp),
-        +(e.rangedBehavior?.aimAmt ?? e.aimAmt).toFixed(2),
+        +(e.rangedBehavior?.aimAmt ?? e.boss?.aimAmt ?? e.aimAmt).toFixed(2),
         +(e.blade?.attackT ?? 0).toFixed(2),
         (e.bomber?.fuseT ?? -1) >= 0 ? 1 : 0,
-        e.bossAtk ? 1 : 0,
+        e.boss?.attackPose ? 1 : 0,
       ]);
     }
     return out;
@@ -627,10 +657,11 @@ export class EnemyManager {
       } else if (e.state !== 'spawn') e.state = st;
       e.hp = r[6];
       if (e.rangedBehavior) e.rangedBehavior.applyAim(r[7]);
+      else if (e.boss) e.boss.applyAim(r[7]);
       else e.aimAmt = r[7];
       e.blade?.applyAttackTime(r[8]);
       e.bomber?.applyFuse(r[9] ? 0.5 : -1);
-      e.bossAtk = r[10] ? e.bossAtk || { kind: 'stomp', t: 0.3 } : null;
+      e.boss?.applyAttack(Boolean(r[10]));
       if (e.T.boss && this.onBoss) this.onBoss(e);
     }
   }
@@ -738,28 +769,23 @@ export class EnemyManager {
       }
     }
   }
-  _steer(e, dt, gx, gz, speed, accel) {
-    const yaw = e.navigation.steer(gx, gz, speed, accel, dt);
-    if (yaw !== null) e.navigation.heading = yaw;
-  }
 
-  _follow(e, dt, target, speed) {
-    const yaw = e.navigation.follow(dt, target, speed);
-    if (yaw !== null) e.navigation.heading = yaw;
-  }
   _wander(e, dt) {
     if (e.rangedBehavior) {
       e.rangedBehavior.idle(dt);
+      return;
+    }
+    if (e.boss) {
+      e.boss.idle(dt);
       return;
     }
     e.body.vel.x = damp(e.body.vel.x, 0, 6, dt);
     e.body.vel.z = damp(e.body.vel.z, 0, 6, dt);
     e.aimAmt = damp(e.aimAmt, 0, 5, dt);
   }
-  _think(e, dt, pp, pc, P) {
+  _think(e, dt, P) {
     const T = e.T;
     const sensed = e.perception.update(dt, P);
-    const { distance: dist, height: dy, yaw: yawTo } = sensed;
     e.clock.remaining -= dt;
     if (T.weapon === 'bomb') {
       e.bomber.update(dt, sensed);
@@ -771,300 +797,16 @@ export class EnemyManager {
       return;
     }
     if (T.weapon === 'boss') {
-      this._thinkBoss(e, dt, pp, pc, dist, dy, yawTo, P);
+      e.boss.update(dt, sensed);
       return;
     }
     e.rangedBehavior.update(dt, sensed, P.speed, e.t);
   }
-  _thinkBoss(e, dt, pp, pc, dist, dy, yawTo, P) {
-    const T = e.T,
-      b = e.body,
-      ctx = this.ctx;
-    if (T.bossKind === 'eraser') return this._thinkEraser(e, dt, pp, pc, dist, dy, yawTo, P);
-    if (T.bossKind === 'inkblot') return this._thinkInkblot(e, dt, pp, pc, dist, dy, yawTo, P);
-    if (e.bossAtk) {
-      const a = e.bossAtk;
-      a.t += dt;
-      e.navigation.heading = yawTo;
-      b.vel.x = damp(b.vel.x, 0, 5, dt);
-      b.vel.z = damp(b.vel.z, 0, 5, dt);
-      if (a.kind === 'stomp') {
-        if (a.t > 0.75 && !a.done) {
-          a.done = true;
-          this.ctx.audio.stomp(e.center);
-          ctx.effects.shakeAmt += 0.9;
-          ctx.effects.explosion(b.pos.clone().add(_v.set(0, 0.2, 0)), 7, INK.BLACK);
-          for (let i = 0; i < 24; i++) {
-            const an = (i / 24) * TAU;
-            _v.set(b.pos.x + Math.cos(an) * 3, b.pos.y + 0.3, b.pos.z + Math.sin(an) * 3);
-            _v2.set(Math.cos(an) * 14, 2, Math.sin(an) * 14);
-            ctx.effects.particle('stroke', _v, _v2, {
-              size: 0.06,
-              life: 0.4,
-              ink: INK.BLACK,
-              gravity: 4,
-              stretch: 0.06,
-              drag: 3,
-            });
-          }
-          for (const t of this.targets()) {
-            const dd = Math.hypot(t.body.pos.x - b.pos.x, t.body.pos.z - b.pos.z);
-            if (t.alive && dd < 7.5 && t.body.pos.y < b.pos.y + 2.5) {
-              t.takeDamage(T.dmg * this.mods.damage, e.center);
-              t.knockback(_d.subVectors(t.center, e.center).normalize(), 9);
-            }
-          }
-          this.blastEnemies(b.pos, 6, 60, e);
-        }
-        if (a.t > 1.3) {
-          e.bossAtk = null;
-          e.clock.remaining = rand(T.cool[0], T.cool[1]);
-        }
-      } else {
-        if (a.t > 0.6 && !a.done) {
-          a.done = true;
-          _v.setFromMatrixPosition(e.parts.head.matrixWorld);
-          _v.y += 1;
-          _d.subVectors(pc, _v);
-          const l = _d.length();
-          _d.divideScalar(l);
-          _d.y += l * 0.012;
-          _d.normalize();
-          this.projectiles.fire(_v, _d, {
-            speed: 24,
-            damage: T.dmg * 0.9,
-            owner: e,
-            ink: INK.BLACK,
-            thickness: 0.4,
-            blast: 1,
-          });
-          this.ctx.audio.enemyShot(e.center);
-        }
-        if (a.t > 1.0) {
-          e.bossAtk = null;
-          e.clock.remaining = rand(T.cool[0] * 0.6, T.cool[1] * 0.6);
-        }
-      }
-      return;
-    }
-    e.aimAmt = damp(e.aimAmt, e.perception.visible ? 1 : 0, 6, dt);
-    if (e.clock.remaining <= 0 && e.perception.visible) {
-      if (dist < 7 && Math.abs(dy) < 3) {
-        e.bossAtk = { kind: 'stomp', t: 0, done: false };
-        this.ctx.audio.bossRoar(e.center);
-        return;
-      }
-      if (dist < T.range) {
-        e.bossAtk = { kind: 'throw', t: 0, done: false };
-        return;
-      }
-    }
-    if (e.perception.visible && dist < 14 && Math.abs(dy) < 2)
-      this._steer(e, dt, pp.x, pp.z, T.speed, 30);
-    else this._follow(e, dt, pp, T.speed);
-    if (e.perception.visible) e.navigation.heading = yawTo;
-  }
+
   // THE ERASER: a rubber brick that charges across the ground, then scrubs the page and calls
   // in bombers. It wants to be close; keep moving and it skids past you.
-  _thinkEraser(e, dt, pp, pc, dist, dy, yawTo, P) {
-    const T = e.T,
-      b = e.body,
-      ctx = this.ctx;
-    e.aimAmt = damp(e.aimAmt, 0, 6, dt);
-    if (e.bossAtk) {
-      const a = e.bossAtk;
-      a.t += dt;
-      if (a.kind === 'charge') {
-        if (a.t < 0.7) {
-          e.navigation.heading = yawTo;
-          b.vel.x = damp(b.vel.x, 0, 8, dt);
-          b.vel.z = damp(b.vel.z, 0, 8, dt);
-          if (a.t > 0.55 && !a.dir) {
-            a.dir = new THREE.Vector3(pp.x - b.pos.x, 0, pp.z - b.pos.z).normalize();
-            this.ctx.audio.bossRoar(e.center);
-          }
-        } else if (a.t < 1.9) {
-          b.vel.x = a.dir.x * 17 * this.mods.speed;
-          b.vel.z = a.dir.z * 17 * this.mods.speed;
-          for (const t of this.targets()) {
-            if (!t.alive) continue;
-            const d = Math.hypot(t.body.pos.x - b.pos.x, t.body.pos.z - b.pos.z);
-            if (d < 2.6 && Math.abs(t.body.pos.y - b.pos.y) < 3 && !a.hit) {
-              a.hit = true;
-              t.takeDamage(T.dmg * this.mods.damage, e.center);
-              t.knockback(_d.subVectors(t.center, e.center).setY(0.2).normalize(), 13);
-              ctx.effects.shakeAmt += 0.5;
-            }
-          }
-          if (b.hitWall) {
-            a.t = 1.9;
-            ctx.effects.strokeBurst(e.center, INK.PINK, 30, 9, { life: 0.4, size: 0.05 });
-            this.ctx.audio.stomp(e.center);
-            ctx.effects.shakeAmt += 0.6;
-          }
-          if (Math.floor(a.t * 10) !== Math.floor((a.t - dt) * 10))
-            ctx.effects.strokeBurst(b.pos.clone().add(_v.set(0, 0.3, 0)), INK.PINK, 4, 3, {
-              life: 0.35,
-              size: 0.06,
-            });
-        } else {
-          b.vel.x = damp(b.vel.x, 0, 4, dt);
-          b.vel.z = damp(b.vel.z, 0, 4, dt);
-          if (a.t > 2.7) {
-            e.bossAtk = null;
-            e.clock.remaining = rand(T.cool[0], T.cool[1]);
-            e.charges = (e.charges || 0) + 1;
-          }
-        }
-      } else {
-        e.navigation.heading = yawTo;
-        b.vel.x = damp(b.vel.x, 0, 6, dt);
-        b.vel.z = damp(b.vel.z, 0, 6, dt);
-        if (a.t > 0.9 && !a.done) {
-          a.done = true;
-          this.ctx.audio.stomp(e.center);
-          ctx.effects.shakeAmt += 0.8;
-          // scrubs the page clean around itself, and the rubbings get up and walk
-          ctx.effects.explosion(b.pos.clone().add(_v.set(0, 0.2, 0)), 6, INK.PINK);
-          const live = this.enemies.filter((x) => x.alive && x.type === 'bomber').length;
-          for (let i = 0; i < 2 && live + i < 4; i++) {
-            const an = rand(0, TAU);
-            const sp = this.spawn(
-              'bomber',
-              b.pos.clone().add(_v.set(Math.cos(an) * 3, 0, Math.sin(an) * 3)),
-            );
-            sp.state = 'hunt';
-            sp.root.scale.setScalar(sp.T.scale);
-          }
-          for (const t of this.targets()) {
-            const d = Math.hypot(t.body.pos.x - b.pos.x, t.body.pos.z - b.pos.z);
-            if (t.alive && d < 6.5 && t.body.pos.y < b.pos.y + 3) {
-              t.takeDamage(T.dmg * 0.8 * this.mods.damage, e.center);
-              t.knockback(_d.subVectors(t.center, e.center).normalize(), 9);
-            }
-          }
-        }
-        if (a.t > 1.6) {
-          e.bossAtk = null;
-          e.clock.remaining = rand(T.cool[0], T.cool[1]);
-        }
-      }
-      return;
-    }
-    if (e.clock.remaining <= 0 && e.perception.visible) {
-      if ((e.charges || 0) % 3 === 2 && dist < 12) {
-        e.bossAtk = { kind: 'rub', t: 0, done: false };
-        e.charges++;
-        return;
-      }
-      if (dist < T.range && dist > 3) {
-        e.bossAtk = { kind: 'charge', t: 0, hit: false, dir: null };
-        return;
-      }
-    }
-    if (e.perception.visible && dist < 16 && Math.abs(dy) < 2)
-      this._steer(e, dt, pp.x, pp.z, T.speed, 30);
-    else this._follow(e, dt, pp, T.speed);
-    if (e.perception.visible) e.navigation.heading = yawTo;
-  }
+
   // THE INKBLOT: hops around the arena, sprays fans of bursting ink, and shakes wasps loose.
-  _thinkInkblot(e, dt, pp, pc, dist, dy, yawTo, P) {
-    const T = e.T,
-      b = e.body,
-      ctx = this.ctx;
-    e.aimAmt = damp(e.aimAmt, e.perception.visible ? 1 : 0, 6, dt);
-    if (e.bossAtk) {
-      const a = e.bossAtk;
-      a.t += dt;
-      e.navigation.heading = yawTo;
-      b.vel.x = damp(b.vel.x, 0, 6, dt);
-      b.vel.z = damp(b.vel.z, 0, 6, dt);
-      if (a.kind === 'spray') {
-        if (a.t > 0.6 && a.shots < 9 && a.t > 0.6 + a.shots * 0.09) {
-          _v.setFromMatrixPosition(e.parts.torso.matrixWorld);
-          _v.y += 0.8;
-          const base = Math.atan2(pp.x - b.pos.x, pp.z - b.pos.z);
-          const an = base + (a.shots - 4) * 0.19;
-          _d.set(Math.sin(an), 0.18 + rand(-0.05, 0.05), Math.cos(an)).normalize();
-          this.projectiles.fire(_v, _d, {
-            speed: 20,
-            damage: T.dmg * 0.55 * this.mods.damage,
-            owner: e,
-            ink: INK.BLACK,
-            thickness: 0.3,
-            blast: 1,
-          });
-          a.shots++;
-          if (a.shots === 1) this.ctx.audio.enemyShot(e.center);
-        }
-        if (a.t > 1.8) {
-          e.bossAtk = null;
-          e.clock.remaining = rand(T.cool[0], T.cool[1]);
-          e.sprays = (e.sprays || 0) + 1;
-        }
-      } else {
-        if (a.t > 0.8 && !a.done) {
-          a.done = true;
-          this.ctx.audio.bossRoar(e.center);
-          ctx.effects.strokeBurst(e.center, INK.BLACK, 40, 10, { life: 0.5, size: 0.05 });
-          const live = this.enemies.filter((x) => x.alive && x.type === 'flyer').length;
-          for (let i = 0; i < 3 && live + i < 6; i++) {
-            const sp = this.spawn(
-              'flyer',
-              e.center.clone().add(_v.set(rand(-2, 2), 2 + i, rand(-2, 2))),
-            );
-            sp.state = 'hunt';
-            sp.root.scale.setScalar(sp.T.scale);
-          }
-        }
-        if (a.t > 1.4) {
-          e.bossAtk = null;
-          e.clock.remaining = rand(T.cool[0], T.cool[1]);
-        }
-      }
-      return;
-    }
-    // it moves in hops: a big jump toward you every couple of seconds, a slam of ink on landing
-    e.hopT = (e.hopT ?? 1) - dt;
-    if (b.onGround && e.hopT <= 0 && dist > 4) {
-      e.hopT = rand(1.6, 2.4);
-      const nx = (pp.x - b.pos.x) / dist,
-        nz = (pp.z - b.pos.z) / dist;
-      b.vel.set(nx * 11, 13, nz * 11);
-      b.onGround = false;
-      e.hopping = true;
-    }
-    if (e.hopping && b.onGround) {
-      e.hopping = false;
-      this.ctx.audio.stomp(e.center);
-      ctx.effects.shakeAmt += 0.4;
-      ctx.effects.bloodPool(b.pos, 3.5, INK.BLACK);
-      for (const t of this.targets()) {
-        const d = Math.hypot(t.body.pos.x - b.pos.x, t.body.pos.z - b.pos.z);
-        if (t.alive && d < 4.5 && Math.abs(t.body.pos.y - b.pos.y) < 2.5) {
-          t.takeDamage(T.dmg * 0.7 * this.mods.damage, e.center);
-          t.knockback(_d.subVectors(t.center, e.center).normalize(), 8);
-        }
-      }
-    }
-    if (e.clock.remaining <= 0 && e.perception.visible) {
-      if ((e.sprays || 0) % 3 === 2) {
-        e.bossAtk = { kind: 'summon', t: 0, done: false };
-        e.sprays++;
-        return;
-      }
-      if (dist < T.range) {
-        e.bossAtk = { kind: 'spray', t: 0, shots: 0 };
-        return;
-      }
-    }
-    if (!e.hopping) {
-      if (e.perception.visible && dist < 14 && Math.abs(dy) < 2)
-        this._steer(e, dt, pp.x, pp.z, T.speed, 30);
-      else this._follow(e, dt, pp, T.speed);
-    }
-    if (e.perception.visible) e.navigation.heading = yawTo;
-  }
 
   _hideLaser(e) {
     e.telegraph.hide();
@@ -1084,7 +826,7 @@ export class EnemyManager {
     pose.flinch = e.flinch;
     pose.state = e.state;
     pose.flyState = e.flyer?.state ?? 'orbit';
-    pose.bossAtk = e.bossAtk;
+    pose.bossAtk = e.boss?.attackPose ?? null;
     e.animation.update(pose, dt, pc);
   }
 }
