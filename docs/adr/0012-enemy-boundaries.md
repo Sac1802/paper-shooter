@@ -24,6 +24,11 @@ would retain those dependencies.
   remain unchanged. RangedAttack owns burst and sniper aim progress, with explicit muzzle,
   cooldown, numeric target speed, projectile emit, damage modifier, laser and feedback ports.
   It receives neither actor nor manager and does not schedule asynchronous work.
+- EnemyCombat owns HP/max HP/shield state and authority decisions. Mirrors report hits without
+  applying host-owned damage; population membership owns the death transition. EnemyHitFeedback
+  owns flash/flinch and the blood/audio/HUD/rumble recipes behind outcome ports. Fuse flashes
+  remain independent of damage flinch. A stale cleared actor is rejected before health or
+  feedback changes. Boss updates retain their ordering before death requests.
 - Enemy model construction returns a checked discriminated walking/flying rig, with named
   joints and mutable hit-region projections. EnemyDisassembly owns walking-model fragment
   selection/transfer, shield detachment and corpse pose. It receives model/pose and feedback
@@ -87,7 +92,7 @@ ownership decisions. Narrow structural ports add explicit composition while allo
 collision/authority tests. Existing EnemyManager forwarding methods preserve actor/weapon callers
 until the remaining orchestration migration.
 
-This decision is incremental: enemy composition, health policy, flying-body death transfer and replication still remain in
+This decision is incremental: enemy composition, explosion/lifecycle orchestration, flying-body death transfer and replication still remain in
 the legacy JavaScript coordinator. Checked queries/projectiles/model recipes do not imply that the
 manager or its composition is checked. R3 and R5 remain open until those responsibilities have their
 own contracts and owners.

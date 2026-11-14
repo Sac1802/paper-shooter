@@ -1,6 +1,7 @@
 // Enemies: doodle humanoids (asdf-style stick figures with faces), flyers, bombers, shield bearers and a boss.
 import * as THREE from 'three';
-import { setFill } from '../presentation/ink/materials.js';
+import { EnemyHitFeedback } from '../presentation/characters/hit-feedback.js';
+import { EnemyCombat } from './enemies/combat.js';
 import { INK } from '../shared/ink.js';
 import { makeBody } from '../engine/physics.js';
 import { rand, clamp, damp, angleLerp } from '../engine/math.js';
@@ -116,9 +117,24 @@ export class EnemyManager {
       get hit() {
         return model.hit;
       },
-      hp: T.hp,
-      maxHp: T.hp,
-      alive: true,
+      get hp() {
+        return e.combat.hp;
+      },
+      set hp(value) {
+        e.combat.hp = value;
+      },
+      get maxHp() {
+        return e.combat.maxHp;
+      },
+      set maxHp(value) {
+        e.combat.maxHp = value;
+      },
+      get alive() {
+        return e.combat.alive;
+      },
+      set alive(value) {
+        e.combat.alive = value;
+      },
       state: 'spawn',
       t: 0,
       body,
@@ -128,9 +144,6 @@ export class EnemyManager {
         ? new FlyerAnimation(model.J, seed.animationPhase)
         : new WalkerAnimation(T, model.J, seed.animationPhase),
       aimAmt: 0,
-      flinch: 0,
-      flashT: 0,
-      flashOn: false,
       clock: { remaining: seed.cooldown },
       stunDur: 0,
       deadT: 0,
@@ -142,9 +155,38 @@ export class EnemyManager {
       get hitSpheres() {
         return model.hitSpheres;
       },
-      shieldHp: T.shield ? 2 : 0,
+      get shieldHp() {
+        return e.combat.shieldHp;
+      },
       rootDetached: false,
     };
+    e.hitFeedback = new EnemyHitFeedback(
+      model.mat,
+      { center: e.center, ink: T.ink, boss: T.boss },
+      {
+        effects: this.ctx.effects,
+        audio: this.ctx.audio,
+        hud: this.ctx.hud,
+        input: this.ctx.input,
+      },
+    );
+    e.combat = new EnemyCombat(T, {
+      present: () => this.byId.get(e.id) === e,
+      mirror: () => this.mirror,
+      damageModifier: () => this.mods.damage,
+      feedback: e.hitFeedback,
+      clientHit: (amount, impact) => this.onClientHit?.(e, amount, impact),
+      breakShield: () => this._breakShield(e),
+      wake: () => {
+        if (e.state === 'spawn') {
+          e.state = 'hunt';
+          e.root.scale.setScalar(T.scale);
+        }
+      },
+      bossChanged: () => this.onBoss?.(e),
+      hitstop: (duration, scale) => this.ctx.game.hitstop(duration, scale),
+      kill: (impact) => this.kill(e, impact),
+    });
     e.disassembly =
       model.kind === 'walking'
         ? new EnemyDisassembly(
@@ -164,13 +206,7 @@ export class EnemyManager {
     e.bomber =
       T.weapon === 'bomb'
         ? new BomberBehavior(T, e.body, e.navigation, {
-            flash: () => {
-              e.flashT = 0.02;
-              if (!e.flashOn) {
-                setFill(e.mat, true);
-                e.flashOn = true;
-              }
-            },
+            flash: () => e.hitFeedback.flash(0.02),
             fuse: () => this.ctx.audio.fuse(e.center),
             explode: () => this._explodeBomber(e),
           })
@@ -307,7 +343,7 @@ export class EnemyManager {
   yank(e, target) {
     if (!e.alive) return;
     if (e.T.boss) {
-      e.flinch = 1;
+      e.hitFeedback.nudge();
       return;
     }
     e.state = 'stunned';
@@ -324,69 +360,7 @@ export class EnemyManager {
     this.ctx.effects.blood(e.center, _d, 0.4);
   }
   damage(e, amount, info) {
-    if (!e.alive) return;
-    if (this.mirror) {
-      // show the hit right away, let the host decide what it did
-      if (info.part !== 'shield') {
-        e.flinch = 1;
-        e.flashT = 0.07;
-        if (!e.flashOn) {
-          setFill(e.mat, true);
-          e.flashOn = true;
-        }
-        this.ctx.effects.blood(
-          info.point || e.center,
-          info.dir || _up,
-          clamp(0.5 + amount / 70, 0.5, 2.2),
-          { ink: e.T.ink === INK.BLACK ? INK.BLACK : INK.RED },
-        );
-        this.ctx.hud.hitmarker(false, info.crit);
-      }
-      if (this.onClientHit) this.onClientHit(e, amount, info);
-      return;
-    }
-    if (info.part === 'shield') {
-      this.ctx.effects.sparks(
-        info.point,
-        info.dir ? info.dir.clone().negate() : _up,
-        INK.ORANGE,
-        8,
-        8,
-      );
-      this.ctx.audio.shieldHit(info.point);
-      if (info.source === 'katana' || info.source === 'blast') {
-        e.shieldHp--;
-        if (e.shieldHp <= 0) this._breakShield(e);
-      }
-      this.ctx.hud.hitmarker(false, false);
-      return;
-    }
-    amount *= this.mods.damage;
-    e.hp -= amount;
-    e.flinch = 1;
-    e.flashT = 0.07;
-    if (!e.flashOn) {
-      setFill(e.mat, true);
-      e.flashOn = true;
-    }
-    const dir = info.dir || _d.set(0, 1, 0);
-    const amt = clamp(0.5 + amount / 70, 0.5, 2.2) * (e.T.boss ? 1.6 : 1);
-    this.ctx.effects.blood(info.point || e.center, dir, amt, {
-      ink: e.T.ink === INK.BLACK ? INK.BLACK : INK.RED,
-    });
-    if (info.crit) this.ctx.audio.headshot(e.center);
-    else this.ctx.audio.hitEnemy(e.center);
-    this.ctx.hud.hitmarker(e.hp <= 0, info.crit);
-    if (info.source !== 'deflect') this.ctx.input.rumble(0.1, 0.3, 30);
-    if (e.state === 'spawn') {
-      e.state = 'hunt';
-      e.root.scale.setScalar(e.T.scale);
-    }
-    if (e.T.boss && this.onBoss) this.onBoss(e);
-    if (e.hp <= 0) {
-      this.ctx.game.hitstop(info.crit ? 0.05 : 0.025, 0.25);
-      this.kill(e, info);
-    }
+    e.combat.damage(amount, info);
   }
   _breakShield(e) {
     if (e.disassembly?.breakShield()) this._shieldBroken();
@@ -478,14 +452,7 @@ export class EnemyManager {
       const P = this._pickTarget(e, dt) || ctx.player;
       const pp = P.body.pos,
         pc = P.center;
-      if (e.flashT > 0) {
-        e.flashT -= dt;
-        if (e.flashT <= 0 && e.flashOn) {
-          setFill(e.mat, false);
-          e.flashOn = false;
-        }
-      }
-      e.flinch = damp(e.flinch, 0, 9, dt);
+      e.hitFeedback.update(dt);
       if (e.state === 'spawn') {
         const f = clamp(e.t / 0.6, 0, 1);
         e.root.scale.setScalar(
@@ -596,14 +563,7 @@ export class EnemyManager {
         this._updateDead(e, dt);
         continue;
       }
-      if (e.flashT > 0) {
-        e.flashT -= dt;
-        if (e.flashT <= 0 && e.flashOn) {
-          setFill(e.mat, false);
-          e.flashOn = false;
-        }
-      }
-      e.flinch = damp(e.flinch, 0, 9, dt);
+      e.hitFeedback.update(dt);
       if (e.state === 'spawn') {
         const f = clamp(e.t / 0.6, 0, 1);
         e.root.scale.setScalar(
@@ -736,7 +696,7 @@ export class EnemyManager {
     pose.fuseT = e.bomber?.fuseT ?? -1;
     pose.aimAmt = e.rangedBehavior?.aimAmt ?? e.aimAmt;
     pose.attackT = e.blade?.attackT ?? 0;
-    pose.flinch = e.flinch;
+    pose.flinch = e.hitFeedback.amount;
     pose.state = e.state;
     pose.flyState = e.flyer?.state ?? 'orbit';
     pose.bossAtk = e.boss?.attackPose ?? null;

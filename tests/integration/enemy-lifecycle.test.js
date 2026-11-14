@@ -22,3 +22,27 @@ it('retires an enemy death once without negative population or duplicate rewards
   expect(enemies.alive).toBe(0);
   expect(onKill).toHaveBeenCalledOnce();
 });
+
+it('ignores a queued hit against an enemy from a cleared population', () => {
+  vi.useFakeTimers();
+  fixture = applicationFixture();
+  fixture.app.controls.begin();
+  const { enemies, effects, hud } = fixture;
+  const enemy = enemies.spawn('grunt', new Vector3(0, 0, -4)),
+    health = enemy.hp;
+  enemies.clear();
+  const blood = vi.spyOn(effects, 'blood'),
+    marker = vi.spyOn(hud, 'hitmarker'),
+    onKill = vi.spyOn(enemies, 'onKill');
+  enemies.damage(enemy, 10000, {
+    source: 'rifle',
+    part: 'torso',
+    point: enemy.center.clone(),
+    dir: new Vector3(0, 1, 0),
+  });
+  expect(enemy.hp).toBe(health);
+  expect(enemies.alive).toBe(0);
+  expect(blood).not.toHaveBeenCalled();
+  expect(marker).not.toHaveBeenCalled();
+  expect(onKill).not.toHaveBeenCalled();
+});
