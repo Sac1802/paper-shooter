@@ -24,6 +24,11 @@ would retain those dependencies.
   remain unchanged. RangedAttack owns burst and sniper aim progress, with explicit muzzle,
   cooldown, numeric target speed, projectile emit, damage modifier, laser and feedback ports.
   It receives neither actor nor manager and does not schedule asynchronous work.
+- Enemy model construction returns a checked discriminated walking/flying rig, with named
+  joints and mutable hit-region projections. EnemyDisassembly owns walking-model fragment
+  selection/transfer, shield detachment and corpse pose. It receives model/pose and feedback
+  capabilities, never health or the actor/manager. A deterministic domain classification preserves
+  the existing overkill/reward thresholds; shield score changes remain outside presentation.
 - EnemyPopulation owns membership, ID allocation shared with projectiles, live counts and
   reverse-order corpse retirement. Read-only collection/index surfaces replace coordinator writes.
   Match clear preserves the allocator. Death is idempotent and requires current membership; stale
@@ -82,7 +87,7 @@ ownership decisions. Narrow structural ports add explicit composition while allo
 collision/authority tests. Existing EnemyManager forwarding methods preserve actor/weapon callers
 until the remaining orchestration migration.
 
-This decision is incremental: enemy creation, health/death effects policy and replication still remain in
+This decision is incremental: enemy composition, health policy, flying-body death transfer and replication still remain in
 the legacy JavaScript coordinator. Checked queries/projectiles/model recipes do not imply that the
 manager or its composition is checked. R3 and R5 remain open until those responsibilities have their
 own contracts and owners.

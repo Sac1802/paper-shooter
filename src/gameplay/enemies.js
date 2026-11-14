@@ -1,17 +1,18 @@
 // Enemies: doodle humanoids (asdf-style stick figures with faces), flyers, bombers, shield bearers and a boss.
 import * as THREE from 'three';
-import { makeInkMaterial, setFill } from '../presentation/ink/materials.js';
+import { setFill } from '../presentation/ink/materials.js';
 import { INK } from '../shared/ink.js';
 import { makeBody } from '../engine/physics.js';
-import { rand, randInt, clamp, damp, angleLerp } from '../engine/math.js';
+import { rand, clamp, damp, angleLerp } from '../engine/math.js';
 
 const _v = new THREE.Vector3(),
-  _v2 = new THREE.Vector3(),
   _d = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 
 import { TYPES, STATE_CODES, STATE_NAMES } from '../domain/enemies.js';
-import { buildHumanoid, buildBomber, buildFlyer } from '../presentation/models/characters.js';
+import { buildEnemyModel } from '../presentation/models/enemy.js';
+import { enemyDeathDecision } from '../domain/enemy-death.js';
+import { EnemyDisassembly } from '../presentation/characters/disassembly.js';
 import { createRangedAttack } from './enemies/ranged-attack.js';
 import { BladeBehavior } from './enemies/blade-behavior.js';
 import { EnemySlash } from '../presentation/characters/melee-slash.js';
@@ -30,7 +31,6 @@ import { WalkerAnimation } from '../presentation/characters/walker-animation.js'
 import { FlyerAnimation } from '../presentation/characters/flyer-animation.js';
 import { animationFrame } from '../presentation/characters/animation-contracts.js';
 import { EnemyLaser } from '../presentation/characters/laser.js';
-import { DeathPose } from '../presentation/characters/death-pose.js';
 import { Projectiles } from './projectiles.js';
 export { BOSSES } from '../domain/waves.js';
 export { TYPES, STATE_CODES, STATE_NAMES } from '../domain/enemies.js';
@@ -99,21 +99,8 @@ export class EnemyManager {
   }
   spawn(type, pos, id = null) {
     const T = TYPES[type];
-    const ink = T.ink ?? INK.RED;
-    const mat = makeInkMaterial({ ink, shadeScale: 0, shadeBias: 1 });
-    const solid = makeInkMaterial({
-      ink: T.ink === INK.BLACK ? INK.RED : INK.BLACK,
-      fill: true,
-      side: THREE.DoubleSide,
-    });
-    const model =
-      T.model === 'bomber'
-        ? buildBomber(mat, solid, T)
-        : T.model === 'blob'
-          ? buildBomber(mat, solid, T, true)
-          : T.model === 'flyer'
-            ? buildFlyer(mat, solid, T)
-            : buildHumanoid(mat, solid, T);
+    const model = buildEnemyModel(T),
+      mat = model.mat;
     const hw = T.flying ? 0.45 : Math.min(0.33 * T.scale, 0.9);
     const body = makeBody(pos, hw, (T.flying ? 0.8 : 1.85) * T.scale, T.boss ? 1.2 : 0.6);
     const seed = drawEnemySeed();
@@ -126,14 +113,16 @@ export class EnemyManager {
       J: model.J,
       tip: model.tip,
       face: model.face,
-      hit: model.hit,
+      get hit() {
+        return model.hit;
+      },
       hp: T.hp,
       maxHp: T.hp,
       alive: true,
       state: 'spawn',
       t: 0,
       body,
-      center: new THREE.Vector3(),
+      center: model.center,
       yaw: seed.yaw,
       animation: T.flying
         ? new FlyerAnimation(model.J, seed.animationPhase)
@@ -150,10 +139,26 @@ export class EnemyManager {
         { world: this.ctx.world, navigation: () => this.ctx.nav, speed: () => this.mods.speed },
         { weapon: T.weapon, angle: this._slot++ * 2.39996, delay: seed.formationDelay },
       ),
-      hitSpheres: model.hit.map(() => new THREE.Vector3()),
+      get hitSpheres() {
+        return model.hitSpheres;
+      },
       shieldHp: T.shield ? 2 : 0,
       rootDetached: false,
     };
+    e.disassembly =
+      model.kind === 'walking'
+        ? new EnemyDisassembly(
+            T,
+            model,
+            { center: e.center, position: e.body.pos, yaw: () => e.yaw },
+            {
+              scene: this.ctx.scene,
+              effects: this.ctx.effects,
+              audio: this.ctx.audio,
+              shieldBroken: () => this._shieldBroken(),
+            },
+          )
+        : null;
     e.telegraph = new EnemyLaser(this.ctx.scene, this.ctx.resources);
     e.perception = new EnemyPerception(e.body.pos, (out) => this.eye(e, out), this.ctx.world);
     e.bomber =
@@ -384,21 +389,9 @@ export class EnemyManager {
     }
   }
   _breakShield(e) {
-    const g = e.J.shieldG;
-    if (!g || !g.parent) return;
-    g.updateWorldMatrix(true, false);
-    this.ctx.scene.attach(g);
-    this.ctx.effects.debris(
-      g,
-      g.position,
-      new THREE.Vector3(rand(-3, 3), 4, rand(-3, 3)),
-      new THREE.Vector3(rand(-6, 6), rand(-6, 6), rand(-6, 6)),
-      { radius: 0.4, blood: false, life: 8 },
-    );
-    e.hit = e.hit.filter((h) => h[0] !== 'shield');
-    e.hitSpheres = e.hit.map(() => new THREE.Vector3());
-    e.J.shieldG = null;
-    this.ctx.audio.shieldHit(e.center);
+    if (e.disassembly?.breakShield()) this._shieldBroken();
+  }
+  _shieldBroken() {
     this.ctx.game.addScore(40, 'SHIELD BROKEN');
   }
   kill(e, info) {
@@ -407,7 +400,6 @@ export class EnemyManager {
     this._removeLaser(e);
     const eff = this.ctx.effects,
       scene = this.ctx.scene;
-    const inkC = e.T.ink === INK.BLACK ? INK.BLACK : INK.RED;
     if (e.face) {
       e.face.eyes.visible = false;
       e.face.xeyes.visible = true;
@@ -437,72 +429,14 @@ export class EnemyManager {
       if (this.onKill) this.onKill(e, info, true);
       return;
     }
-    const over =
-      -e.hp > e.maxHp * 0.35 ||
-      info.source === 'katana' ||
-      info.crit ||
-      info.source === 'deflect' ||
-      info.source === 'blast';
-    const detach = (obj, extraVel, radius) => {
-      if (!obj || !obj.parent) return;
-      obj.updateWorldMatrix(true, false);
-      scene.attach(obj);
-      _v.copy(dir).multiplyScalar(rand(3, 7)).add(extraVel);
-      _v.y += rand(2, 5);
-      eff.debris(obj, obj.position, _v, new THREE.Vector3(rand(-8, 8), rand(-8, 8), rand(-8, 8)), {
-        radius,
-        blood: true,
-        life: rand(7, 10),
-      });
-    };
-    if (over) {
-      this.ctx.audio.gib(e.center);
-      const J = e.J;
-      if (
-        info.crit ||
-        ((info.source === 'katana' || info.source === 'focus') && Math.random() < 0.35)
-      ) {
-        detach(J.headG, _v2.set(rand(-2, 2), 3, rand(-2, 2)), 0.25);
-        eff.fountain(
-          e.parts.torso.getWorldPosition(new THREE.Vector3()).add(_v2.set(0, 0.35, 0)),
-          _up,
-          0.9,
-          inkC,
-        );
-      }
-      if (info.source === 'katana' || info.source === 'focus') {
-        const r = Math.random();
-        if (r < 0.4) detach(J.armR, _v2.set(rand(-3, 3), 2, rand(-3, 3)), 0.12);
-        else if (r < 0.7) detach(J.armL, _v2.set(rand(-3, 3), 2, rand(-3, 3)), 0.12);
-        else {
-          detach(J.torso, _v2.set(rand(-2, 2), 2, rand(-2, 2)), 0.3);
-          const hips = e.parts.hips ?? J.hips;
-          eff.fountain(hips.getWorldPosition(new THREE.Vector3()), _up, 0.7, inkC);
-        }
-      } else if (info.source === 'deflect' || info.source === 'blast' || -e.hp > e.maxHp * 0.6) {
-        const limbs = [J.armL, J.armR, J.legL, J.legR, J.torso];
-        const k = e.T.boss ? 5 : randInt(1, 2);
-        for (let i = 0; i < k && limbs.length; i++) {
-          const o = limbs.splice(randInt(0, limbs.length - 1), 1)[0];
-          detach(o, _v2.set(rand(-3, 3), 2, rand(-3, 3)), 0.15);
-        }
-      }
-    }
-    e.deathPose = new DeathPose(e.root, e.J.hips.parent, {
-      axis: Math.random() < 0.5 ? 'x' : 'z',
-      sign: dir.z > 0 || Math.random() < 0.5 ? 1 : -1,
-    });
-    eff.bloodPool(e.body.pos, rand(1.1, 1.8) * (e.T.boss ? 2.5 : 1), inkC);
-    eff.blood(e.center, dir, 1.2, { ink: inkC });
-    if (Math.random() < 0.6 && e.J.gun && e.J.gun.parent)
-      detach(e.J.gun, _v2.set(rand(-2, 2), 2, rand(-2, 2)), 0.08);
-    if (e.J.shieldG) this._breakShield(e);
+    const decision = enemyDeathDecision(e.hp, e.maxHp, info);
+    e.disassembly.perform(info, dir, decision);
     if (e.T.boss) {
       eff.explosion(e.center, 6, INK.BLACK);
       this.ctx.audio.explosion(e.center);
       if (this.onBoss) this.onBoss(e);
     }
-    if (this.onKill) this.onKill(e, info, over);
+    if (this.onKill) this.onKill(e, info, decision.sever);
   }
   _explodeBomber(e, scale = 1) {
     const T = e.T;
@@ -721,7 +655,7 @@ export class EnemyManager {
   }
   _updateDead(e, dt) {
     e.deadT += dt;
-    if (!e.rootDetached) e.deathPose?.update(dt, e.deadT, e.T.scale, e.yaw);
+    if (!e.rootDetached) e.disassembly?.update(dt, e.deadT);
   }
   _separate(dt) {
     this._sepT -= dt;
