@@ -1,0 +1,42 @@
+{
+  "grunt": {
+    "geometry": "cae764b73a414099bb4e5b5e6567411514c2867a2901eaf569d5fd88f3486136",
+    "simulation": "55ce66f39f43bdce6755c2e498cac24695b9c86df8157084edcb16e682e3b945"
+  },
+  "rusher": {
+    "geometry": "896641f21657251cc4593d872daa76e673a31b241f5bfe5ad4dc7167dcc07b45",
+    "simulation": "c182c8b905224ba2db3f66bfe82a9024ca1be7608aedd00a20c1a5c61b240683"
+  },
+  "heavy": {
+    "geometry": "00112ca50844ebd9f51aed07d5367f473a143f1f3538a2313f8f2d29c700ec91",
+    "simulation": "dec11cf156aff1f2ed7f15d818e931eb19cb6e84fb9d949cb7267105ef48f368"
+  },
+  "sniper": {
+    "geometry": "c8a4c320b61b17019037fbe68aeff1dee331a2c3d67e42c069eaff3192f1f70a",
+    "simulation": "fac1143f31d20be62479b17ad88f39c9e4a05ab36286ea7a89c863d8e38e32d0"
+  },
+  "shield": {
+    "geometry": "aafb6b5c7ab3def4650df6b279ef6580e8f2c73cdedaee709630869bd5860a7f",
+    "simulation": "1b4e7bc056694db52d963fdd2534e7b76f4f723cc6a250f965d6e0f399235dfe"
+  },
+  "bomber": {
+    "geometry": "6ed2cafe47c3902d171542af32fab74d19f116faf0bf5f1246f6a3bd69bcb86e",
+    "simulation": "b80be6a4218497c3b8559a185ab697bbe5ba1745a5c7bce3ce53f97e9c10f7e0"
+  },
+  "flyer": {
+    "geometry": "2f1759886faab35c4a34997c8e88d9470aeaef08f2d84f35786ed9a5a9beecec",
+    "simulation": "8c3dff70e138bd3b2c679a1d3f82c4321e174e917fa73e8d1907c241d2d08d55"
+  },
+  "boss": {
+    "geometry": "ce79b54de01dc61eadbc3b94d86aaae7ebaf2cc6705347d302159b6b7718365f",
+    "simulation": "20e83e99ee9680b151ca2a2a2915fe6cee00865db499ad2ca2eceac22a94b709"
+  },
+  "eraser": {
+    "geometry": "f0ccb622909a0f65d79e562e704c7d2aa371d5ed0b744fb52d6c0f4ad7523326",
+    "simulation": "2a506221d34956fddeefb3e4419db5dc89db044e89808cda3fbda46c8f936b05"
+  },
+  "inkblot": {
+    "geometry": "385284eabb00a965b5705f893bf74eccd08533cbb1c9bbf761e30d5c014cbcc3",
+    "simulation": "4031e8cd5c2f7a3551fa21874bf8d7612d5d78f33527a35699e8ccc0d285f53e"
+  }
+}
