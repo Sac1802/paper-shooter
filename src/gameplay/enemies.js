@@ -1,41 +1,20 @@
-// Enemies: doodle humanoids (asdf-style stick figures with faces), flyers, bombers, shield bearers and a boss.
+// Enemy population and frame/lifecycle coordination; actor composition has explicit checked capabilities.
 import * as THREE from 'three';
-import { EnemyHitFeedback } from '../presentation/characters/hit-feedback.js';
-import { EnemyCombat } from './enemies/combat.js';
 import { INK } from '../shared/ink.js';
-import { makeBody } from '../engine/physics.js';
-import { rand, clamp, damp, angleLerp } from '../engine/math.js';
-
-const _v = new THREE.Vector3(),
-  _d = new THREE.Vector3();
-const _up = new THREE.Vector3(0, 1, 0);
-
-import { TYPES, STATE_CODES, STATE_NAMES } from '../domain/enemies.js';
-import { buildEnemyModel } from '../presentation/models/enemy.js';
+import { rand, clamp, angleLerp } from '../engine/math.js';
+import { STATE_CODES, STATE_NAMES } from '../domain/enemies.js';
 import { enemyDeathDecision } from '../domain/enemy-death.js';
-import { EnemyDisassembly } from '../presentation/characters/disassembly.js';
-import { createRangedAttack } from './enemies/ranged-attack.js';
-import { BladeBehavior } from './enemies/blade-behavior.js';
-import { EnemySlash } from '../presentation/characters/melee-slash.js';
-import { EnemyPerception } from './enemies/perception.js';
-import { BomberBehavior } from './enemies/bomber-behavior.js';
-import { drawEnemySeed } from './enemies/seed.js';
-import { createRangedBehavior } from './enemies/ranged-behavior.js';
-import { FlyerBehavior } from './enemies/flyer-behavior.js';
-import { BossFeedback } from '../presentation/characters/boss-feedback.js';
-import { createBossBehavior } from './enemies/boss-factory.js';
+import { EnemyActor } from './enemies/actor.js';
 import { EnemyPopulation } from './enemies/population.js';
-import { EnemyNavigation } from './enemies/navigation.js';
 import { EnemyQueries } from './enemies/queries.js';
+import { BossFeedback } from '../presentation/characters/boss-feedback.js';
 import { ProjectileView } from '../presentation/projectiles.js';
-import { WalkerAnimation } from '../presentation/characters/walker-animation.js';
-import { FlyerAnimation } from '../presentation/characters/flyer-animation.js';
-import { animationFrame } from '../presentation/characters/animation-contracts.js';
-import { EnemyLaser } from '../presentation/characters/laser.js';
 import { Projectiles } from './projectiles.js';
+const _v = new THREE.Vector3(),
+  _d = new THREE.Vector3(),
+  _up = new THREE.Vector3(0, 1, 0);
 export { BOSSES } from '../domain/waves.js';
 export { TYPES, STATE_CODES, STATE_NAMES } from '../domain/enemies.js';
-
 export class EnemyManager {
   constructor(ctx) {
     this.ctx = ctx;
@@ -50,6 +29,55 @@ export class EnemyManager {
       ctx.world,
     );
     this.bossFeedback = new BossFeedback(ctx.effects, ctx.audio);
+    this.actorServices = {
+      environment: {
+        scene: ctx.scene,
+        resources: ctx.resources,
+        world: ctx.world,
+        navigation: () => ctx.nav,
+      },
+      feedback: {
+        effects: ctx.effects,
+        audio: ctx.audio,
+        hud: ctx.hud,
+        input: ctx.input,
+        boss: this.bossFeedback,
+      },
+      policy: {
+        present: (ref) => this.byId.get(ref.id) === ref,
+        mirror: () => this.mirror,
+        damageModifier: () => this.mods.damage,
+        speedModifier: () => this.mods.speed,
+        localSpeed: () => ctx.player.speed,
+        targets: () => this.targets(),
+        kill: (ref, impact) => {
+          const actor = this.resolveActor(ref);
+          if (actor) this.kill(actor, impact);
+        },
+        clientHit: (ref, amount, impact) => {
+          const actor = this.resolveActor(ref);
+          if (actor) this.onClientHit?.(actor, amount, impact);
+        },
+        bossChanged: (ref) => {
+          const actor = this.resolveActor(ref);
+          if (actor) this.onBoss?.(actor);
+        },
+        shieldBroken: () => this._shieldBroken(),
+        hitstop: (duration, scale) => ctx.game.hitstop(duration, scale),
+        explode: (ref, scale) => {
+          const actor = this.resolveActor(ref);
+          if (actor) this._explodeBomber(actor, scale);
+        },
+        emit: (owner, position, direction, shot) =>
+          this.projectiles.fire(position, direction, { ...shot, owner }),
+        blast: (ref, point, radius, damage) => {
+          const actor = this.resolveActor(ref);
+          if (actor) this.blastEnemies(point, radius, damage, actor);
+        },
+        count: (kind) => this.count(kind),
+        spawnReady: (kind, position) => this.spawnReady(kind, position),
+      },
+    };
     this.projectiles = new Projectiles(
       {
         world: ctx.world,
@@ -75,6 +103,10 @@ export class EnemyManager {
     this.onClientHit = null;
     this.onSpawn = null;
   }
+  resolveActor(ref) {
+    const actor = this.byId.get(ref.id);
+    return actor === ref ? actor : null;
+  }
   get enemies() {
     return this.population.entries;
   }
@@ -99,192 +131,8 @@ export class EnemyManager {
     this.projectiles.clear();
   }
   spawn(type, pos, id = null) {
-    const T = TYPES[type];
-    const model = buildEnemyModel(T),
-      mat = model.mat;
-    const hw = T.flying ? 0.45 : Math.min(0.33 * T.scale, 0.9);
-    const body = makeBody(pos, hw, (T.flying ? 0.8 : 1.85) * T.scale, T.boss ? 1.2 : 0.6);
-    const seed = drawEnemySeed();
-    const e = {
-      type,
-      T,
-      mat,
-      root: model.root,
-      parts: model.parts,
-      J: model.J,
-      tip: model.tip,
-      face: model.face,
-      get hit() {
-        return model.hit;
-      },
-      get hp() {
-        return e.combat.hp;
-      },
-      set hp(value) {
-        e.combat.hp = value;
-      },
-      get maxHp() {
-        return e.combat.maxHp;
-      },
-      set maxHp(value) {
-        e.combat.maxHp = value;
-      },
-      get alive() {
-        return e.combat.alive;
-      },
-      set alive(value) {
-        e.combat.alive = value;
-      },
-      state: 'spawn',
-      t: 0,
-      body,
-      center: model.center,
-      yaw: seed.yaw,
-      animation: T.flying
-        ? new FlyerAnimation(model.J, seed.animationPhase)
-        : new WalkerAnimation(T, model.J, seed.animationPhase),
-      aimAmt: 0,
-      clock: { remaining: seed.cooldown },
-      stunDur: 0,
-      deadT: 0,
-      navigation: new EnemyNavigation(
-        body,
-        { world: this.ctx.world, navigation: () => this.ctx.nav, speed: () => this.mods.speed },
-        { weapon: T.weapon, angle: this._slot++ * 2.39996, delay: seed.formationDelay },
-      ),
-      get hitSpheres() {
-        return model.hitSpheres;
-      },
-      get shieldHp() {
-        return e.combat.shieldHp;
-      },
-      rootDetached: false,
-    };
-    e.hitFeedback = new EnemyHitFeedback(
-      model.mat,
-      { center: e.center, ink: T.ink, boss: T.boss },
-      {
-        effects: this.ctx.effects,
-        audio: this.ctx.audio,
-        hud: this.ctx.hud,
-        input: this.ctx.input,
-      },
-    );
-    e.combat = new EnemyCombat(T, {
-      present: () => this.byId.get(e.id) === e,
-      mirror: () => this.mirror,
-      damageModifier: () => this.mods.damage,
-      feedback: e.hitFeedback,
-      clientHit: (amount, impact) => this.onClientHit?.(e, amount, impact),
-      breakShield: () => this._breakShield(e),
-      wake: () => {
-        if (e.state === 'spawn') {
-          e.state = 'hunt';
-          e.root.scale.setScalar(T.scale);
-        }
-      },
-      bossChanged: () => this.onBoss?.(e),
-      hitstop: (duration, scale) => this.ctx.game.hitstop(duration, scale),
-      kill: (impact) => this.kill(e, impact),
-    });
-    e.disassembly =
-      model.kind === 'walking'
-        ? new EnemyDisassembly(
-            T,
-            model,
-            { center: e.center, position: e.body.pos, yaw: () => e.yaw },
-            {
-              scene: this.ctx.scene,
-              effects: this.ctx.effects,
-              audio: this.ctx.audio,
-              shieldBroken: () => this._shieldBroken(),
-            },
-          )
-        : null;
-    e.telegraph = new EnemyLaser(this.ctx.scene, this.ctx.resources);
-    e.perception = new EnemyPerception(e.body.pos, (out) => this.eye(e, out), this.ctx.world);
-    e.bomber =
-      T.weapon === 'bomb'
-        ? new BomberBehavior(T, e.body, e.navigation, {
-            flash: () => e.hitFeedback.flash(0.02),
-            fuse: () => this.ctx.audio.fuse(e.center),
-            explode: () => this._explodeBomber(e),
-          })
-        : null;
-    e.slash = T.weapon === 'blade' ? new EnemySlash(this.ctx.effects) : null;
-    e.blade =
-      T.weapon === 'blade'
-        ? new BladeBehavior(T, e.body, e.navigation, e.clock, {
-            center: e.center,
-            damageModifier: () => this.mods.damage,
-            audio: this.ctx.audio,
-            slash: () => e.slash.draw(e.center, e.yaw),
-            stun: (duration) => {
-              e.state = 'stunned';
-              e.t = 0;
-              e.stunDur = duration;
-            },
-          })
-        : null;
-    e.ranged = createRangedAttack(T, e.tip, e.clock, {
-      center: e.center,
-      damageModifier: () => this.mods.damage,
-      laser: e.telegraph,
-      audio: this.ctx.audio,
-      effects: this.ctx.effects,
-      emit: (position, direction, bullet) =>
-        this.projectiles.fire(position, direction, { ...bullet, owner: e }),
-    });
-    e.rangedBehavior = createRangedBehavior(T, e.body, e.navigation, {
-      attack: e.ranged,
-      localSpeed: () => this.ctx.player.speed,
-      keepMultiplier: seed.keepMultiplier,
-      strafeDirection: seed.strafeDirection,
-      strafeDuration: seed.strafeDuration,
-    });
-    e.flyer =
-      T.weapon === 'dive'
-        ? new FlyerBehavior(
-            T,
-            e.body,
-            e.clock,
-            {
-              center: e.center,
-              orientation: e.navigation,
-              world: this.ctx.world,
-              damageModifier: () => this.mods.damage,
-              speedModifier: () => this.mods.speed,
-              audio: this.ctx.audio,
-              stunned: () => {
-                e.state = 'stunned';
-                e.t = 0;
-              },
-              recovered: () => {
-                e.state = 'hunt';
-              },
-            },
-            { duration: seed.flyDuration, orbitDirection: seed.orbitDirection },
-          )
-        : null;
-    e.boss = createBossBehavior(
-      T,
-      { body: e.body, clock: e.clock, motion: e.navigation },
-      {
-        center: e.center,
-        targets: () => this.targets(),
-        damageModifier: () => this.mods.damage,
-        speedModifier: () => this.mods.speed,
-        feedback: this.bossFeedback,
-        head: (out) => out.setFromMatrixPosition(e.parts.head.matrixWorld),
-        torso: (out) => out.setFromMatrixPosition(e.parts.torso.matrixWorld),
-        emit: (position, direction, shot) =>
-          this.projectiles.fire(position, direction, { ...shot, owner: e }),
-        blast: (position, radius, damage) => this.blastEnemies(position, radius, damage, e),
-        count: (kind) => this.count(kind),
-        spawnReady: (kind, position) => this.spawnReady(kind, position),
-      },
-    );
-    e.animationFrame = animationFrame(e.body.vel, e.center);
+    const e = new EnemyActor(type, pos, this._slot++, this.actorServices),
+      T = e.T;
     e.id = id ?? this.population.allocateId();
     e.body.alwaysStep = true;
     if (T.flying) e.body.noSnap = true;
@@ -434,7 +282,7 @@ export class EnemyManager {
     e.deadT = 99;
   }
   eye(e, out) {
-    return out.setFromMatrixPosition(e.parts.head.matrixWorld);
+    return e.eye(out);
   }
   update(dt) {
     if (this.mirror) {
@@ -608,14 +456,10 @@ export class EnemyManager {
     this.onKill = cb;
   }
   _syncHit(e) {
-    e.root.updateMatrixWorld(true);
-    for (let i = 0; i < e.hit.length; i++)
-      e.hitSpheres[i].setFromMatrixPosition(e.parts[e.hit[i][0]].matrixWorld);
-    e.center.setFromMatrixPosition(e.parts.torso.matrixWorld);
+    e.syncHit();
   }
   _updateDead(e, dt) {
-    e.deadT += dt;
-    if (!e.rootDetached) e.disassembly?.update(dt, e.deadT);
+    e.updateDead(dt);
   }
   _separate(dt) {
     this._sepT -= dt;
@@ -644,42 +488,11 @@ export class EnemyManager {
   }
 
   _wander(e, dt) {
-    if (e.rangedBehavior) {
-      e.rangedBehavior.idle(dt);
-      return;
-    }
-    if (e.boss) {
-      e.boss.idle(dt);
-      return;
-    }
-    e.body.vel.x = damp(e.body.vel.x, 0, 6, dt);
-    e.body.vel.z = damp(e.body.vel.z, 0, 6, dt);
-    e.aimAmt = damp(e.aimAmt, 0, 5, dt);
+    e.idle(dt);
   }
-  _think(e, dt, P) {
-    const T = e.T;
-    const sensed = e.perception.update(dt, P);
-    e.clock.remaining -= dt;
-    if (T.weapon === 'bomb') {
-      e.bomber.update(dt, sensed);
-      return;
-    }
-    if (T.weapon === 'blade') {
-      e.aimAmt = damp(e.aimAmt, 0, 8, dt);
-      e.blade.update(dt, sensed, P);
-      return;
-    }
-    if (T.weapon === 'boss') {
-      e.boss.update(dt, sensed);
-      return;
-    }
-    e.rangedBehavior.update(dt, sensed, P.speed, e.t);
+  _think(e, dt, target) {
+    e.think(dt, target);
   }
-
-  // THE ERASER: a rubber brick that charges across the ground, then scrubs the page and calls
-  // in bombers. It wants to be close; keep moving and it skids past you.
-
-  // THE INKBLOT: hops around the arena, sprays fans of bursting ink, and shakes wasps loose.
 
   _hideLaser(e) {
     e.telegraph.hide();
@@ -688,18 +501,7 @@ export class EnemyManager {
     e.telegraph.dispose();
   }
 
-  _animate(e, dt, pc) {
-    const pose = e.animationFrame;
-    pose.onGround = e.body.onGround;
-    pose.yaw = e.yaw;
-    pose.time = e.t;
-    pose.fuseT = e.bomber?.fuseT ?? -1;
-    pose.aimAmt = e.rangedBehavior?.aimAmt ?? e.aimAmt;
-    pose.attackT = e.blade?.attackT ?? 0;
-    pose.flinch = e.hitFeedback.amount;
-    pose.state = e.state;
-    pose.flyState = e.flyer?.state ?? 'orbit';
-    pose.bossAtk = e.boss?.attackPose ?? null;
-    e.animation.update(pose, dt, pc);
+  _animate(e, dt, point) {
+    e.animate(dt, point);
   }
 }
