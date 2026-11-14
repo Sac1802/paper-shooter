@@ -1,9 +1,10 @@
 // Enemy population and frame/lifecycle coordination; actor composition has explicit checked capabilities.
 import * as THREE from 'three';
 import { INK } from '../shared/ink.js';
-import { rand, clamp, angleLerp } from '../engine/math.js';
+import { rand, clamp } from '../engine/math.js';
 import { enemyDeathDecision } from '../domain/enemy-death.js';
 import { EnemyReplication } from './enemies/replication.js';
+import { EnemySimulation } from './enemies/simulation.js';
 import { EnemyActor } from './enemies/actor.js';
 import { EnemyPopulation } from './enemies/population.js';
 import { EnemyQueries } from './enemies/queries.js';
@@ -34,6 +35,10 @@ export class EnemyManager {
       () => this.byId,
       (enemy) => this.onBoss?.(enemy),
     );
+    this.simulation = new EnemySimulation(() => this.enemies, ctx.world, {
+      target: (enemy, dt) => this._pickTarget(enemy, dt) || ctx.player,
+      kill: (enemy, impact) => this.kill(enemy, impact),
+    });
     this.actorServices = {
       environment: {
         scene: ctx.scene,
@@ -100,7 +105,6 @@ export class EnemyManager {
     );
     this.onKill = null;
     this.onBoss = null;
-    this._sepT = 0;
     this._slot = 0;
     this.mods = { speed: 1, damage: 1 };
     // mirror mode: this peer is a client; the host owns AI, physics and health, we only render
@@ -295,72 +299,7 @@ export class EnemyManager {
       this._updateMirror(dt);
       return;
     }
-    const ctx = this.ctx,
-      world = ctx.world;
-    for (const e of this.enemies) {
-      e.t += dt;
-      if (!e.alive) {
-        this._updateDead(e, dt);
-        continue;
-      }
-      const P = this._pickTarget(e, dt) || ctx.player;
-      const pp = P.body.pos,
-        pc = P.center;
-      e.hitFeedback.update(dt);
-      if (e.state === 'spawn') {
-        const f = clamp(e.t / 0.6, 0, 1);
-        e.root.scale.setScalar(
-          Math.max(0.001, f * e.T.scale * (1 + Math.sin(e.t * 60) * 0.12 * (1 - f))),
-        );
-        e.root.position.copy(e.body.pos);
-        e.root.rotation.y = e.yaw;
-        this._syncHit(e);
-        if (e.t >= 0.6) {
-          e.state = 'hunt';
-          e.root.scale.setScalar(e.T.scale);
-        }
-        continue;
-      }
-      if (e.state === 'stunned') this._hideLaser(e);
-      if (e.T.flying) {
-        e.flyer.update(dt, P, e.t);
-        world.moveBody(e.body, dt);
-      } else {
-        if (e.state === 'stunned') {
-          if (e.t > e.stunDur) e.state = 'hunt';
-        } else if (P.alive) this._think(e, dt, P);
-        else this._wander(e, dt);
-        e.body.vel.y -= 24 * dt;
-        world.moveBody(e.body, dt);
-      }
-      if (e.body.pos.y < -6) {
-        this.kill(e, { source: 'fall', dir: _up.clone() });
-        continue;
-      }
-      e.yaw = angleLerp(e.yaw, e.navigation.heading, 1 - Math.exp(-10 * dt));
-      e.root.position.copy(e.body.pos);
-      e.root.rotation.y = e.yaw;
-      // never let a body occupy the same space as the player
-      if (!e.T.flying) {
-        const pr = 0.36 + e.body.halfW + 0.12;
-        const ox = e.body.pos.x - pp.x,
-          oz = e.body.pos.z - pp.z;
-        const o2 = ox * ox + oz * oz;
-        if (o2 < pr * pr && Math.abs(e.body.pos.y - pp.y) < 1.7) {
-          const od = Math.sqrt(o2) || 0.0001;
-          const push = pr - od;
-          e.body.pos.x += (ox / od) * push;
-          e.body.pos.z += (oz / od) * push;
-          if (world.overlapsBody(e.body)) {
-            e.body.pos.x -= (ox / od) * push;
-            e.body.pos.z -= (oz / od) * push;
-          }
-        }
-      }
-      this._animate(e, dt, pc);
-      this._syncHit(e);
-    }
-    this._separate(dt);
+    this.simulation.update(dt);
     this.projectiles.update(dt);
     this.population.retire(9, this.releaseEntity);
   }
@@ -421,38 +360,6 @@ export class EnemyManager {
   }
   _updateDead(e, dt) {
     e.updateDead(dt);
-  }
-  _separate(dt) {
-    this._sepT -= dt;
-    if (this._sepT > 0) return;
-    this._sepT = 0.05;
-    const es = this.enemies;
-    for (let i = 0; i < es.length; i++) {
-      const a = es[i];
-      if (!a.alive || a.T.flying) continue;
-      for (let j = i + 1; j < es.length; j++) {
-        const b = es[j];
-        if (!b.alive || b.T.flying) continue;
-        const dx = b.body.pos.x - a.body.pos.x,
-          dz = b.body.pos.z - a.body.pos.z;
-        const d2 = dx * dx + dz * dz;
-        const rr = a.body.halfW + b.body.halfW + 0.75;
-        if (d2 > rr * rr || d2 < 1e-6 || Math.abs(b.body.pos.y - a.body.pos.y) > 1.5) continue;
-        const d = Math.sqrt(d2);
-        const push = (rr - d) * 9;
-        a.body.vel.x -= (dx / d) * push;
-        a.body.vel.z -= (dz / d) * push;
-        b.body.vel.x += (dx / d) * push;
-        b.body.vel.z += (dz / d) * push;
-      }
-    }
-  }
-
-  _wander(e, dt) {
-    e.idle(dt);
-  }
-  _think(e, dt, target) {
-    e.think(dt, target);
   }
 
   _hideLaser(e) {

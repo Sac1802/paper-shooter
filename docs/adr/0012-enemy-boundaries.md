@@ -24,6 +24,11 @@ would retain those dependencies.
   remain unchanged. RangedAttack owns burst and sniper aim progress, with explicit muzzle,
   cooldown, numeric target speed, projectile emit, damage modifier, laser and feedback ports.
   It receives neither actor nor manager and does not schedule asynchronous work.
+- EnemySimulation owns host frame phases, gravity/world integration, target separation and
+  pair-separation cadence behind actor/world protocols. It retains live-array iteration so summons
+  are processed in the same frame. Spawn finalization follows hit-region synchronization; target
+  separation follows root pose writes, matching the old order. Replicas do not execute host AI
+  or collision integration.
 - EnemyReplication owns compact snapshot projection, previous/next history, interpolation and
   history clearing. It consumes an actor replica protocol with state/health/pose commands and
   knows no concrete model or brain. The eleven-number tuple, 100 ms render delay, bounded
@@ -104,7 +109,7 @@ ownership decisions. Narrow structural ports add explicit composition while allo
 collision/authority tests. Existing EnemyManager forwarding methods preserve actor/weapon callers
 until the remaining orchestration migration.
 
-This decision is incremental: the legacy manager capability binding, explosion/frame orchestration, flying-body death transfer still remain in
+This decision is incremental: the legacy manager capability binding, explosion/lifecycle orchestration, flying-body death transfer still remain in
 the legacy JavaScript coordinator. Checked queries/projectiles/model recipes do not imply that the
 manager or its composition is checked. R3 and R5 remain open until those responsibilities have their
 own contracts and owners.
