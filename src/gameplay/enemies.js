@@ -226,7 +226,7 @@ export class EnemyManager {
   _shieldBroken() {
     this.ctx.game.addScore(40, 'SHIELD BROKEN');
   }
-  kill(e, info) {
+  kill(e, info, notify = true) {
     if (!this.population.markDead(e)) return;
     e.body.vel.set(0, 0, 0);
     this._removeLaser(e);
@@ -239,7 +239,7 @@ export class EnemyManager {
     const dir = (info.dir || _d.set(0, 0.5, 0)).clone().normalize();
     if (e.T.weapon === 'bomb') {
       this._explodeBomber(e, 0.8);
-      if (this.onKill) this.onKill(e, info, true);
+      if (notify && this.onKill) this.onKill(e, info, true);
       return;
     }
     this.ctx.audio.enemyDie(e.center);
@@ -258,7 +258,7 @@ export class EnemyManager {
         { radius: 0.5, blood: true, life: 8 },
       );
       eff.blood(e.center, dir, 1);
-      if (this.onKill) this.onKill(e, info, true);
+      if (notify && this.onKill) this.onKill(e, info, true);
       return;
     }
     const decision = enemyDeathDecision(e.hp, e.maxHp, info);
@@ -268,7 +268,7 @@ export class EnemyManager {
       this.ctx.audio.explosion(e.center);
       if (this.onBoss) this.onBoss(e);
     }
-    if (this.onKill) this.onKill(e, info, decision.sever);
+    if (notify && this.onKill) this.onKill(e, info, decision.sever);
   }
   _explodeBomber(e, scale = 1) {
     const T = e.T;
@@ -346,14 +346,15 @@ export class EnemyManager {
   killMirror(id, info) {
     const e = this.byId.get(id);
     if (!e || !e.alive) return;
-    const cb = this.onKill;
-    this.onKill = null;
-    this.kill(e, {
-      ...info,
-      dir: info.dir ? new THREE.Vector3().fromArray(info.dir) : _up.clone(),
-      point: info.point ? new THREE.Vector3().fromArray(info.point) : e.center.clone(),
-    });
-    this.onKill = cb;
+    this.kill(
+      e,
+      {
+        ...info,
+        dir: info.dir ? new THREE.Vector3().fromArray(info.dir) : _up.clone(),
+        point: info.point ? new THREE.Vector3().fromArray(info.point) : e.center.clone(),
+      },
+      false,
+    );
   }
   _syncHit(e) {
     e.syncHit();
