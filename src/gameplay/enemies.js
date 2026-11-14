@@ -3,16 +3,7 @@ import * as THREE from 'three';
 import { makeInkMaterial, setFill } from '../presentation/ink/materials.js';
 import { INK } from '../shared/ink.js';
 import { makeBody, SEE_THROUGH } from '../engine/physics.js';
-import {
-  rand,
-  randInt,
-  clamp,
-  damp,
-  wrapAngle,
-  angleLerp,
-  alignYAxis,
-  TAU,
-} from '../engine/math.js';
+import { rand, randInt, clamp, damp, angleLerp, TAU } from '../engine/math.js';
 
 const _v = new THREE.Vector3(),
   _v2 = new THREE.Vector3(),
@@ -28,6 +19,11 @@ import { TYPES, STATE_CODES, STATE_NAMES } from '../domain/enemies.js';
 import { buildHumanoid, buildBomber, buildFlyer } from '../presentation/models/characters.js';
 import { EnemyQueries } from './enemies/queries.js';
 import { ProjectileView } from '../presentation/projectiles.js';
+import { WalkerAnimation } from '../presentation/characters/walker-animation.js';
+import { FlyerAnimation } from '../presentation/characters/flyer-animation.js';
+import { animationFrame } from '../presentation/characters/animation-contracts.js';
+import { EnemyLaser } from '../presentation/characters/laser.js';
+import { DeathPose } from '../presentation/characters/death-pose.js';
 import { Projectiles } from './projectiles.js';
 export { BOSSES } from '../domain/waves.js';
 export { TYPES, STATE_CODES, STATE_NAMES } from '../domain/enemies.js';
@@ -126,8 +122,9 @@ export class EnemyManager {
       center: new THREE.Vector3(),
       yaw: rand(0, TAU),
       yawT: 0,
-      phase: rand(0, TAU),
-      walk: 0,
+      animation: T.flying
+        ? new FlyerAnimation(model.J, rand(0, TAU))
+        : new WalkerAnimation(T, model.J, rand(0, TAU)),
       aimAmt: 0,
       flinch: 0,
       flashT: 0,
@@ -163,6 +160,8 @@ export class EnemyManager {
       bossAtk: null,
       rootDetached: false,
     };
+    e.telegraph = new EnemyLaser(this.ctx.scene, this.ctx.resources);
+    e.animationFrame = animationFrame(e.body.vel, e.center);
     e.id = id ?? this.nextId++;
     this.byId.set(e.id, e);
     e.body.alwaysStep = true;
@@ -404,11 +403,10 @@ export class EnemyManager {
         }
       }
     }
-    e.topple = {
+    e.deathPose = new DeathPose(e.root, e.J.hips.parent, {
       axis: Math.random() < 0.5 ? 'x' : 'z',
       sign: dir.z > 0 || Math.random() < 0.5 ? 1 : -1,
-      t: 0,
-    };
+    });
     eff.bloodPool(e.body.pos, rand(1.1, 1.8) * (e.T.boss ? 2.5 : 1), inkC);
     eff.blood(e.center, dir, 1.2, { ink: inkC });
     if (Math.random() < 0.6 && e.J.gun && e.J.gun.parent)
@@ -485,7 +483,7 @@ export class EnemyManager {
         }
         continue;
       }
-      if (e.state === 'stunned' && e.laser) this._hideLaser(e);
+      if (e.state === 'stunned') this._hideLaser(e);
       if (e.T.flying) {
         this._thinkFlyer(e, dt, pc, P);
         world.moveBody(e.body, dt);
@@ -521,8 +519,7 @@ export class EnemyManager {
           }
         }
       }
-      if (e.T.flying) this._animateFlyer(e, dt);
-      else this._animate(e, dt, pc);
+      this._animate(e, dt, pc);
       this._syncHit(e);
     }
     this._separate(dt);
@@ -618,9 +615,8 @@ export class EnemyManager {
       }
       e.root.position.copy(e.body.pos);
       e.root.rotation.y = e.yaw;
-      if (e.T.flying) this._animateFlyer(e, dt);
-      else this._animate(e, dt, P.center);
-      if (e.T.weapon === 'sniper' && e.laser) e.laser.visible = e.aimAmt > 0.9;
+      this._animate(e, dt, P.center);
+      if (e.T.weapon === 'sniper') e.telegraph.setVisible(e.aimAmt > 0.9);
       this._syncHit(e);
     }
     this.projectiles.update(dt);
@@ -656,16 +652,7 @@ export class EnemyManager {
   }
   _updateDead(e, dt) {
     e.deadT += dt;
-    const tp = e.topple;
-    if (!tp || e.rootDetached) return;
-    if (tp.t < 1) {
-      tp.t = Math.min(1, tp.t + dt * 2.2);
-      const a = tp.sign * (Math.PI / 2) * (1 - Math.pow(1 - tp.t, 2));
-      if (tp.axis === 'x') e.J.hips.parent.rotation.x = a;
-      else e.J.hips.parent.rotation.z = a;
-    }
-    if (e.deadT > 8.3) e.root.scale.setScalar(Math.max(0.001, ((9 - e.deadT) / 0.7) * e.T.scale));
-    e.root.rotation.y = e.yaw;
+    if (!e.rootDetached) e.deathPose?.update(dt, e.deadT, e.T.scale, e.yaw);
   }
   _separate(dt) {
     this._sepT -= dt;
@@ -1400,35 +1387,13 @@ export class EnemyManager {
     }
   }
   _showLaser(e, from, to, charge) {
-    if (!e.laser) {
-      e.laser = new THREE.Mesh(
-        new THREE.CylinderGeometry(1, 1, 1, 5),
-        makeInkMaterial({ ink: INK.RED, fill: true }),
-      );
-      e.laser.frustumCulled = false;
-      this.ctx.scene.add(e.laser);
-      this.ctx.resources.track(e.laser);
-    }
-    e.laser.visible = true;
-    // stop the beam short of where it is pointing, otherwise a shot aimed at your face
-    // renders as a red slab filling the screen instead of a thin telegraph line
-    const d = _v2.subVectors(to, from);
-    const len = d.length();
-    if (len < 2) {
-      e.laser.visible = false;
-      return;
-    }
-    _v3.copy(from).addScaledVector(d, 1 - 1.6 / len);
-    alignYAxis(e.laser, from, _v3, 0.006 + 0.012 * charge * charge);
+    e.telegraph.show(from, to, charge);
   }
   _hideLaser(e) {
-    if (e.laser) e.laser.visible = false;
+    e.telegraph.hide();
   }
   _removeLaser(e) {
-    if (e.laser) {
-      this.ctx.resources.release(e.laser);
-      e.laser = null;
-    }
+    e.telegraph.dispose();
   }
   _fireOne(e, muzzle, pc, spread, speed, dmg, thick, P = this.ctx.player) {
     _d.subVectors(pc, muzzle);
@@ -1448,113 +1413,19 @@ export class EnemyManager {
     });
     this.ctx.effects.strokeBurst(muzzle, INK.ORANGE, 4, 4, { life: 0.07, size: 0.03 });
   }
-  _animateFlyer(e, dt) {
-    const J = e.J,
-      b = e.body;
-    e.phase += dt * 14;
-    const flap = Math.sin(e.phase) * 0.35;
-    J.wl.rotation.z = flap;
-    J.wr.rotation.z = -flap;
-    const roll = clamp(-(b.vel.x * Math.cos(e.yaw) - b.vel.z * Math.sin(e.yaw)) * 0.05, -0.8, 0.8);
-    J.body.rotation.z = damp(J.body.rotation.z, roll, 6, dt);
-    J.body.rotation.x = damp(J.body.rotation.x, clamp(-b.vel.y * 0.06, -0.6, 0.6), 6, dt);
-    J.body.position.y = 0.6 + Math.sin(e.t * 3) * 0.1;
-    if (e.flyState === 'stunned') J.body.rotation.z += dt * 12;
-  }
+
   _animate(e, dt, pc) {
-    const b = e.body,
-      J = e.J,
-      T = e.T;
-    const sp = Math.hypot(b.vel.x, b.vel.z);
-    e.walk = damp(e.walk, clamp(sp / 4, 0, 1), 10, dt);
-    const w = e.walk;
-    e.phase += dt * (sp * 2.2 + (sp > 0.4 ? 3 : 0));
-    const s = Math.sin(e.phase),
-      c = Math.cos(e.phase);
-    J.legL.rotation.x = s * 0.9 * w;
-    J.legR.rotation.x = -s * 0.9 * w;
-    J.shinL.rotation.x = Math.max(0, c) * 1.1 * w;
-    J.shinR.rotation.x = Math.max(0, -c) * 1.1 * w;
-    if (!b.onGround) {
-      J.legL.rotation.x = -0.5;
-      J.legR.rotation.x = 0.6;
-      J.shinL.rotation.x = 1.0;
-      J.shinR.rotation.x = 0.5;
-    }
-    if (T.weapon === 'bomb' || T.model === 'blob') {
-      J.armL.rotation.x = -2.4 + Math.sin(e.t * 20) * 0.4 * w;
-      J.armR.rotation.x = -2.4 - Math.sin(e.t * 20) * 0.4 * w;
-      J.torso.rotation.z = Math.sin(e.phase) * 0.12 * w;
-      J.torso.rotation.x = -0.15 * w;
-      if (J.spark) J.spark.scale.setScalar(0.7 + Math.random() * 0.8 + (e.fuseT >= 0 ? 1.5 : 0));
-      J.hips.position.y = 0.5 + Math.abs(c) * 0.08 * w;
-      if (e.fuseT >= 0) {
-        J.torso.rotation.x = Math.sin(e.t * 40) * 0.15;
-        J.headG.rotation.y = Math.sin(e.t * 30) * 0.3;
-      }
-      return;
-    }
-    const aim = e.aimAmt;
-    if (T.weapon === 'blade') {
-      const at = e.attackT;
-      const wind = at > 0.18 ? clamp((0.55 - at) / 0.37, 0, 1) : 0; // arm goes up and back
-      const strike = at > 0 && at <= 0.18 ? 1 - at / 0.18 : 0; // then chops down
-      J.armR.rotation.x = -0.8 * (1 - w) - s * 0.9 * w - wind * 2.2 + strike * 1.5;
-      J.armR.rotation.z = -0.3 + wind * 0.7 - strike * 0.5;
-      J.foreR.rotation.x = -0.9 - wind * 0.7 + strike * 0.5;
-      J.armL.rotation.x = s * 1.1 * w - wind * 0.5;
-      J.armL.rotation.z = 0.35 * w;
-      J.foreL.rotation.x = -0.6 * w;
-      J.torso.rotation.x = -0.3 * w + e.flinch * 0.35 - wind * 0.25 + strike * 0.55;
-      J.torso.rotation.y = wind * 0.5 - strike * 0.6;
-    } else if (T.weapon === 'boss') {
-      const a = e.bossAtk;
-      let raise = 0,
-        slam = 0;
-      if (a && a.kind === 'stomp') {
-        raise = a.t < 0.75 ? clamp(a.t / 0.6, 0, 1) : 0;
-        slam = a.t >= 0.75 ? 1 : 0;
-      }
-      if (a && a.kind === 'throw') {
-        raise = a.t < 0.6 ? clamp(a.t / 0.5, 0, 1) : 0;
-      }
-      J.armR.rotation.x = -0.4 - s * 0.5 * w - raise * 2.4 + slam * 0.9;
-      J.armR.rotation.z = -0.35;
-      J.foreR.rotation.x = -0.6 - raise * 0.4;
-      J.armL.rotation.x = s * 0.6 * w - raise * 0.8;
-      J.armL.rotation.z = 0.35;
-      J.foreL.rotation.x = -0.5;
-      J.torso.rotation.x = -0.1 * w + e.flinch * 0.15 - raise * 0.3 + slam * 0.5;
-    } else {
-      J.armR.rotation.x = -s * 1.0 * w * (1 - aim) + (-1.35 + e.flinch * 0.35) * aim;
-      J.armR.rotation.z = -0.25 * (1 - aim);
-      J.foreR.rotation.x = -0.35 * (1 - aim) + -0.2 * aim;
-      if (T.shield) {
-        J.armL.rotation.x = -1.2;
-        J.armL.rotation.y = 0.3;
-        J.foreL.rotation.x = -0.9;
-      } else {
-        J.armL.rotation.x = s * 1.0 * w * (1 - aim) + -1.2 * aim;
-        J.armL.rotation.y = 0.6 * aim;
-        J.armL.rotation.z = 0.25 * (1 - aim);
-        J.foreL.rotation.x = -0.4 * (1 - aim) + -0.5 * aim;
-      }
-      J.torso.rotation.x = -0.22 * w + e.flinch * 0.4;
-      J.torso.rotation.y = -0.35 * aim;
-      J.torso.rotation.z = Math.sin(e.phase) * 0.05 * w;
-    }
-    J.hips.position.y = 0.86 + Math.abs(c) * 0.07 * w + (b.onGround ? 0 : -0.05);
-    _v.subVectors(pc, e.center);
-    const yawTo = Math.atan2(_v.x, _v.z);
-    J.headG.rotation.y = clamp(wrapAngle(yawTo - e.yaw) - (J.torso.rotation.y || 0), -1.1, 1.1);
-    J.headG.rotation.x = clamp(-Math.atan2(_v.y, Math.hypot(_v.x, _v.z)), -0.6, 0.6) * 0.8;
-    J.headG.rotation.z = Math.sin(e.phase * 0.5) * 0.06 * w;
-    if (e.state === 'stunned') {
-      J.torso.rotation.x = 0.6;
-      J.armL.rotation.x = -2.5;
-      J.armR.rotation.x = -2.5;
-      J.legL.rotation.x = -0.8;
-      J.legR.rotation.x = 0.9;
-    }
+    const pose = e.animationFrame;
+    pose.onGround = e.body.onGround;
+    pose.yaw = e.yaw;
+    pose.time = e.t;
+    pose.fuseT = e.fuseT;
+    pose.aimAmt = e.aimAmt;
+    pose.attackT = e.attackT;
+    pose.flinch = e.flinch;
+    pose.state = e.state;
+    pose.flyState = e.flyState;
+    pose.bossAtk = e.bossAtk;
+    e.animation.update(pose, dt, pc);
   }
 }
