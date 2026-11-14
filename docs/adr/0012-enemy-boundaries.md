@@ -19,6 +19,11 @@ would retain those dependencies.
   numeric animation frame per actor, with no actor, manager, scene or application access. EnemyLaser
   owns the lazy sniper telegraph and its disposal; DeathPose owns bounded topple interpolation and
   corpse fade. Gameplay still owns death authority and retirement deadlines.
+- Archetype definitions use a checked discriminated union: burst guns, shotgun, sniper, blade,
+  bomber, flyer and bosses declare the fields their behavior requires. Numeric balance values
+  remain unchanged. RangedAttack owns burst and sniper aim progress, with explicit muzzle,
+  cooldown, numeric target speed, projectile emit, damage modifier, laser and feedback ports.
+  It receives neither actor nor manager and does not schedule asynchronous work.
 - EnemyNavigation owns one body's route, refresh deadline, waypoint progress, formation offset and
   obstacle recovery. It consumes world rays, a live navigation-grid reader and the speed modifier;
   it returns optional headings instead of mutating an enemy record. Body creation is moved before
@@ -57,7 +62,8 @@ own contracts and owners.
 Before extraction, ten archetype traces captured geometry bytes, animation/state outcomes,
 projectiles, death/resource retirement and random call counts through composed application play.
 All remain unchanged. Isolated tests cover visibility, retarget deadlines, hit-region precedence,
-ignored targets, boss melee reach, bounded steering, route reuse/retry, grid replacement, grounded
+ignored targets, boss melee reach, burst/cooldown timing, interrupted aim/fire, progressive sniper tracking, shotgun pellet bounds,
+bounded steering, route reuse/retry, grid replacement, grounded
 obstacle recovery, world collision priority, remote damage ownership, wider guard
 catches, reflected hits, blast authority, shared/replicated IDs, capacity and expiry. Presentation regressions verify independent gait state, immutable borrowed
 frames, bounded corpse interpolation and idempotent telegraph resource retirement. These checks

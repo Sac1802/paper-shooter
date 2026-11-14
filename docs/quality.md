@@ -44,6 +44,9 @@ rerun `pnpm audit --prod` when updating dependencies or preparing a release.
   pickups, destructibles, damage, network snapshots, lobby browsing and match results.
 - Pre-extraction weapon geometry/action-cycle, camera, grenade and grapple traces; ammunition
   conservation, reload interruption, melee windows and remote model state.
+- Ten pre-extraction enemy archetype traces: geometry, AI/animation/projectiles, random draw order
+  and death/resource retirement; isolated target queries, route/formation steering, projectile
+  authority/deflection, sniper/burst cycles and presentation lifetime checks.
 - Recorded complete procedural-audio schedules and composed particle/decal/fragment output,
   including shared resource retirement and automatic-reload cancellation.
 - Keyboard/mouse/gamepad input, audio envelopes/theme scheduling, resource/listener/context cleanup.

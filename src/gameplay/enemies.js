@@ -17,6 +17,7 @@ const nxOf = (dx, d) => dx / (d || 1),
 
 import { TYPES, STATE_CODES, STATE_NAMES } from '../domain/enemies.js';
 import { buildHumanoid, buildBomber, buildFlyer } from '../presentation/models/characters.js';
+import { createRangedAttack } from './enemies/ranged-attack.js';
 import { EnemyNavigation } from './enemies/navigation.js';
 import { EnemyQueries } from './enemies/queries.js';
 import { ProjectileView } from '../presentation/projectiles.js';
@@ -133,10 +134,7 @@ export class EnemyManager {
       flashOn: false,
       losT: 0,
       los: false,
-      cool: rand(0.6, 1.4),
-      burstLeft: 0,
-      burstT: 0,
-      aimT: 0,
+      clock: { remaining: rand(0.6, 1.4) },
       attackT: 0,
       attackHit: false,
       stunDur: 0,
@@ -160,6 +158,15 @@ export class EnemyManager {
       rootDetached: false,
     };
     e.telegraph = new EnemyLaser(this.ctx.scene, this.ctx.resources);
+    e.ranged = createRangedAttack(T, e.tip, e.clock, {
+      center: e.center,
+      damageModifier: () => this.mods.damage,
+      laser: e.telegraph,
+      audio: this.ctx.audio,
+      effects: this.ctx.effects,
+      emit: (position, direction, bullet) =>
+        this.projectiles.fire(position, direction, { ...bullet, owner: e }),
+    });
     e.animationFrame = animationFrame(e.body.vel, e.center);
     e.id = id ?? this.nextId++;
     this.byId.set(e.id, e);
@@ -712,7 +719,7 @@ export class EnemyManager {
       e.losT = 0.12 + rand(0, 0.1);
       e.los = ctx.world.hasLineOfSight(this.eye(e, _eye), pc, SEE_THROUGH);
     }
-    e.cool -= dt;
+    e.clock.remaining -= dt;
     const yawTo = Math.atan2(dx, dz);
     if (T.weapon === 'bomb') {
       if (e.fuseT >= 0) {
@@ -782,13 +789,13 @@ export class EnemyManager {
               b.vel.set((-dx / dist) * 7, 3.5, (-dz / dist) * 7);
             } else P.takeDamage(T.dmg * this.mods.damage, e.center);
           } else this.ctx.audio.katanaSwing();
-          e.cool = rand(T.cool[0], T.cool[1]);
+          e.clock.remaining = rand(T.cool[0], T.cool[1]);
           e.backoffT = rand(0.45, 0.75);
         }
         return;
       }
       // wind up from just outside arm's length, with a clear telegraph before the swing lands
-      if (dist < T.lunge && Math.abs(dy) < 1.7 && e.cool <= 0 && e.los) {
+      if (dist < T.lunge && Math.abs(dy) < 1.7 && e.clock.remaining <= 0 && e.los) {
         e.attackT = 0.55;
         e.attackHit = false;
         this.ctx.audio.lunge(e.center);
@@ -867,10 +874,7 @@ export class EnemyManager {
       this._shoot(e, dt, pc, P);
     } else {
       e.aimAmt = damp(e.aimAmt, 0, 5, dt);
-      e.burstLeft = 0;
-      e.aimT = 0;
-      e.aimPoint = null;
-      this._hideLaser(e);
+      e.ranged.interrupt();
       if (T.stationary && e.t < 5) {
         b.vel.x = damp(b.vel.x, 0, 8, dt);
         b.vel.z = damp(b.vel.z, 0, 8, dt);
@@ -921,7 +925,7 @@ export class EnemyManager {
         }
         if (a.t > 1.3) {
           e.bossAtk = null;
-          e.cool = rand(T.cool[0], T.cool[1]);
+          e.clock.remaining = rand(T.cool[0], T.cool[1]);
         }
       } else {
         if (a.t > 0.6 && !a.done) {
@@ -945,13 +949,13 @@ export class EnemyManager {
         }
         if (a.t > 1.0) {
           e.bossAtk = null;
-          e.cool = rand(T.cool[0] * 0.6, T.cool[1] * 0.6);
+          e.clock.remaining = rand(T.cool[0] * 0.6, T.cool[1] * 0.6);
         }
       }
       return;
     }
     e.aimAmt = damp(e.aimAmt, e.los ? 1 : 0, 6, dt);
-    if (e.cool <= 0 && e.los) {
+    if (e.clock.remaining <= 0 && e.los) {
       if (dist < 7 && Math.abs(dy) < 3) {
         e.bossAtk = { kind: 'stomp', t: 0, done: false };
         this.ctx.audio.bossRoar(e.center);
@@ -1014,7 +1018,7 @@ export class EnemyManager {
           b.vel.z = damp(b.vel.z, 0, 4, dt);
           if (a.t > 2.7) {
             e.bossAtk = null;
-            e.cool = rand(T.cool[0], T.cool[1]);
+            e.clock.remaining = rand(T.cool[0], T.cool[1]);
             e.charges = (e.charges || 0) + 1;
           }
         }
@@ -1048,12 +1052,12 @@ export class EnemyManager {
         }
         if (a.t > 1.6) {
           e.bossAtk = null;
-          e.cool = rand(T.cool[0], T.cool[1]);
+          e.clock.remaining = rand(T.cool[0], T.cool[1]);
         }
       }
       return;
     }
-    if (e.cool <= 0 && e.los) {
+    if (e.clock.remaining <= 0 && e.los) {
       if ((e.charges || 0) % 3 === 2 && dist < 12) {
         e.bossAtk = { kind: 'rub', t: 0, done: false };
         e.charges++;
@@ -1100,7 +1104,7 @@ export class EnemyManager {
         }
         if (a.t > 1.8) {
           e.bossAtk = null;
-          e.cool = rand(T.cool[0], T.cool[1]);
+          e.clock.remaining = rand(T.cool[0], T.cool[1]);
           e.sprays = (e.sprays || 0) + 1;
         }
       } else {
@@ -1120,7 +1124,7 @@ export class EnemyManager {
         }
         if (a.t > 1.4) {
           e.bossAtk = null;
-          e.cool = rand(T.cool[0], T.cool[1]);
+          e.clock.remaining = rand(T.cool[0], T.cool[1]);
         }
       }
       return;
@@ -1148,7 +1152,7 @@ export class EnemyManager {
         }
       }
     }
-    if (e.cool <= 0 && e.los) {
+    if (e.clock.remaining <= 0 && e.los) {
       if ((e.sprays || 0) % 3 === 2) {
         e.bossAtk = { kind: 'summon', t: 0, done: false };
         e.sprays++;
@@ -1170,7 +1174,7 @@ export class EnemyManager {
       b = e.body,
       ctx = this.ctx;
     e.flyT -= dt;
-    e.cool -= dt;
+    e.clock.remaining -= dt;
     const want = _v2;
     if (e.flyState === 'stunned') {
       b.vel.y -= 20 * dt;
@@ -1188,7 +1192,11 @@ export class EnemyManager {
         pc.z + Math.cos(ang) * rad,
       );
       this._flyTo(e, want, T.speed, 22, dt);
-      if (e.cool <= 0 && P.alive && ctx.world.hasLineOfSight(e.center, pc, SEE_THROUGH)) {
+      if (
+        e.clock.remaining <= 0 &&
+        P.alive &&
+        ctx.world.hasLineOfSight(e.center, pc, SEE_THROUGH)
+      ) {
         e.flyState = 'dive';
         e.flyT = 1.6;
         e.diveHit = false;
@@ -1214,7 +1222,7 @@ export class EnemyManager {
       if (e.flyT <= 0 || e.diveHit || b.hitWall) {
         e.flyState = 'climb';
         e.flyT = 1.1;
-        e.cool = rand(T.cool[0], T.cool[1]);
+        e.clock.remaining = rand(T.cool[0], T.cool[1]);
       }
     } else {
       want.set(pc.x + (b.pos.x - pc.x) * 1.5, pc.y + 8, pc.z + (b.pos.z - pc.z) * 1.5);
@@ -1250,60 +1258,8 @@ export class EnemyManager {
     if (m > accel * dt) _v3.multiplyScalar((accel * dt) / m);
     b.vel.add(_v3);
   }
-  _shoot(e, dt, pc, P) {
-    const T = e.T,
-      ctx = this.ctx;
-    const muzzle = _v.setFromMatrixPosition(e.tip.matrixWorld);
-    if (T.weapon === 'sniper') {
-      if (e.cool > 0) {
-        this._hideLaser(e);
-        return;
-      }
-      e.aimT += dt;
-      // The beam chases the player rather than being glued to them, and the shot goes exactly
-      // where the beam is pointing - so if you keep moving once you see it, it misses.
-      if (!e.aimPoint) {
-        e.aimPoint = pc.clone();
-      } else e.aimPoint.lerp(pc, 1 - Math.exp(-2.6 * dt));
-      this._showLaser(e, muzzle, e.aimPoint, clamp(e.aimT / T.aimTime, 0, 1));
-      if (e.aimT > T.aimTime * 0.5 && !e.aimWarned) {
-        e.aimWarned = true;
-        this.ctx.audio.sniperAim(e.center);
-      }
-      if (e.aimT >= T.aimTime) {
-        e.aimT = 0;
-        e.aimWarned = false;
-        e.cool = rand(T.cool[0], T.cool[1]);
-        this._fireOne(e, muzzle, e.aimPoint, T.spread, T.pspeed, T.dmg, 0.07, P);
-        this.ctx.audio.sniperShot(e.center);
-        this._hideLaser(e);
-        e.aimPoint = null;
-      }
-      return;
-    }
-    if (e.burstLeft > 0) {
-      e.burstT -= dt;
-      if (e.burstT <= 0) {
-        e.burstT = T.burstInt;
-        e.burstLeft--;
-        this._fireOne(e, muzzle, pc, T.spread, T.pspeed, T.dmg, 0.045, P);
-        this.ctx.audio.enemyShot(e.center);
-        if (e.burstLeft === 0) e.cool = rand(T.cool[0], T.cool[1]);
-      }
-      return;
-    }
-    if (e.cool <= 0) {
-      if (T.weapon === 'shotgun') {
-        for (let i = 0; i < T.pellets; i++)
-          this._fireOne(e, muzzle, pc, T.spread, T.pspeed * rand(0.85, 1.1), T.dmg, 0.05, P);
-        this.ctx.audio.shotgun(e.center);
-        e.cool = rand(T.cool[0], T.cool[1]);
-        ctx.effects.strokeBurst(muzzle, INK.ORANGE, 8, 5, { life: 0.1, size: 0.04 });
-      } else {
-        e.burstLeft = T.burst;
-        e.burstT = 0;
-      }
-    }
+  _shoot(e, dt, pc, P = this.ctx.player) {
+    e.ranged.shoot(dt, pc, P.speed);
   }
   _showLaser(e, from, to, charge) {
     e.telegraph.show(from, to, charge);
@@ -1313,24 +1269,6 @@ export class EnemyManager {
   }
   _removeLaser(e) {
     e.telegraph.dispose();
-  }
-  _fireOne(e, muzzle, pc, spread, speed, dmg, thick, P = this.ctx.player) {
-    _d.subVectors(pc, muzzle);
-    _d.y += rand(-0.2, 0.3);
-    _d.normalize();
-    const sp = spread * (1 + P.speed * 0.06);
-    _d.x += rand(-sp, sp);
-    _d.y += rand(-sp, sp);
-    _d.z += rand(-sp, sp);
-    _d.normalize();
-    this.projectiles.fire(muzzle, _d, {
-      speed: speed,
-      damage: dmg * this.mods.damage,
-      owner: e,
-      ink: INK.RED,
-      thickness: thick,
-    });
-    this.ctx.effects.strokeBurst(muzzle, INK.ORANGE, 4, 4, { life: 0.07, size: 0.03 });
   }
 
   _animate(e, dt, pc) {

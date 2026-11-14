@@ -58,8 +58,8 @@ function frame(enemy) {
     fly: enemy.flyState,
     fuse: number(enemy.fuseT),
     attack: number(enemy.attackT),
-    burst: enemy.burstLeft,
-    aim: number(enemy.aimT),
+    burst: enemy.ranged?.burstLeft ?? 0,
+    aim: number(enemy.ranged?.aimT ?? 0),
     los: enemy.los,
     nodes,
     projectiles: enemies.projectiles.list.map((projectile) => ({

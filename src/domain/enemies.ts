@@ -1,3 +1,4 @@
+import type { EnemyDefinition } from './enemy-definitions.js';
 import { INK } from '../shared/ink.js';
 
 export const STATE_CODES = { spawn: 0, hunt: 1, stunned: 2, dead: 3 };
@@ -174,4 +175,5 @@ export const TYPES = {
     model: 'blob',
     build: {},
   },
-};
+} satisfies Record<string, EnemyDefinition>;
+export type EnemyKind = keyof typeof TYPES;
