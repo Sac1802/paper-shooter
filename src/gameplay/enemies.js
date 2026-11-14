@@ -401,6 +401,7 @@ export class EnemyManager {
     this.ctx.game.addScore(40, 'SHIELD BROKEN');
   }
   kill(e, info) {
+    if (!e.alive) return;
     e.alive = false;
     e.state = 'dead';
     e.deadT = 0;
