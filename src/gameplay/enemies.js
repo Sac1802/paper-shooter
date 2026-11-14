@@ -1,10 +1,12 @@
 // Enemy population and frame/lifecycle coordination; actor composition has explicit checked capabilities.
 import * as THREE from 'three';
 import { INK } from '../shared/ink.js';
-import { rand, clamp } from '../engine/math.js';
-import { enemyDeathDecision } from '../domain/enemy-death.js';
+import { clamp } from '../engine/math.js';
 import { EnemyReplication } from './enemies/replication.js';
 import { EnemySimulation } from './enemies/simulation.js';
+import { EnemyAreaDamage } from './enemies/area-damage.js';
+import { EnemyLifecycle } from './enemies/lifecycle.js';
+import { EnemyDeathFeedback } from '../presentation/characters/death-feedback.js';
 import { EnemyActor } from './enemies/actor.js';
 import { EnemyPopulation } from './enemies/population.js';
 import { EnemyQueries } from './enemies/queries.js';
@@ -12,8 +14,7 @@ import { BossFeedback } from '../presentation/characters/boss-feedback.js';
 import { ProjectileView } from '../presentation/projectiles.js';
 import { Projectiles } from './projectiles.js';
 const _v = new THREE.Vector3(),
-  _d = new THREE.Vector3(),
-  _up = new THREE.Vector3(0, 1, 0);
+  _d = new THREE.Vector3();
 export { BOSSES } from '../domain/waves.js';
 export { TYPES, STATE_CODES, STATE_NAMES } from '../domain/enemies.js';
 export class EnemyManager {
@@ -30,6 +31,22 @@ export class EnemyManager {
       ctx.world,
     );
     this.bossFeedback = new BossFeedback(ctx.effects, ctx.audio);
+    const deathFeedback = new EnemyDeathFeedback(ctx.scene, ctx.effects, ctx.audio);
+    this.area = new EnemyAreaDamage(
+      () => this.enemies,
+      () => this.targets(),
+      {
+        damage: (enemy, amount, impact) => this.damage(enemy, amount, impact),
+        damageModifier: () => this.mods.damage,
+        feedback: deathFeedback,
+      },
+    );
+    this.lifecycle = new EnemyLifecycle(this.population, this.area, deathFeedback, {
+      resources: ctx.resources,
+      score: (points, label) => ctx.game.addScore(points, label),
+      killed: (enemy, impact, sever) => this.onKill?.(enemy, impact, sever),
+      bossChanged: (enemy) => this.onBoss?.(enemy),
+    });
     this.replication = new EnemyReplication(
       () => this.enemies,
       () => this.byId,
@@ -183,20 +200,8 @@ export class EnemyManager {
   inArc(pos, dir, range, cosHalf) {
     return this.queries.inArc(pos, dir, range, cosHalf);
   }
-  blastEnemies(point, radius, dmg, except) {
-    for (const e of this.enemies) {
-      if (!e.alive || e === except) continue;
-      const d = e.center.distanceTo(point);
-      if (d > radius) continue;
-      _d.subVectors(e.center, point).normalize();
-      this.damage(e, dmg * (1 - (d / radius) * 0.6), {
-        point: e.center.clone(),
-        dir: _d.clone(),
-        part: 'torso',
-        source: 'blast',
-        crit: false,
-      });
-    }
+  blastEnemies(point, radius, damage, except) {
+    this.area.blast(point, radius, damage, except);
   }
   yank(e, target) {
     if (!e.alive) return;
@@ -224,72 +229,13 @@ export class EnemyManager {
     if (e.disassembly?.breakShield()) this._shieldBroken();
   }
   _shieldBroken() {
-    this.ctx.game.addScore(40, 'SHIELD BROKEN');
+    this.lifecycle.shieldBroken();
   }
-  kill(e, info, notify = true) {
-    if (!this.population.markDead(e)) return;
-    e.body.vel.set(0, 0, 0);
-    this._removeLaser(e);
-    const eff = this.ctx.effects,
-      scene = this.ctx.scene;
-    if (e.face) {
-      e.face.eyes.visible = false;
-      e.face.xeyes.visible = true;
-    }
-    const dir = (info.dir || _d.set(0, 0.5, 0)).clone().normalize();
-    if (e.T.weapon === 'bomb') {
-      this._explodeBomber(e, 0.8);
-      if (notify && this.onKill) this.onKill(e, info, true);
-      return;
-    }
-    this.ctx.audio.enemyDie(e.center);
-    if (e.T.flying) {
-      e.root.updateWorldMatrix(true, false);
-      scene.attach(e.root);
-      e.rootDetached = true;
-      eff.debris(
-        e.root,
-        e.root.position,
-        dir
-          .clone()
-          .multiplyScalar(4)
-          .add(_v.set(rand(-2, 2), 1, rand(-2, 2))),
-        new THREE.Vector3(rand(-9, 9), rand(-9, 9), rand(-9, 9)),
-        { radius: 0.5, blood: true, life: 8 },
-      );
-      eff.blood(e.center, dir, 1);
-      if (notify && this.onKill) this.onKill(e, info, true);
-      return;
-    }
-    const decision = enemyDeathDecision(e.hp, e.maxHp, info);
-    e.disassembly.perform(info, dir, decision);
-    if (e.T.boss) {
-      eff.explosion(e.center, 6, INK.BLACK);
-      this.ctx.audio.explosion(e.center);
-      if (this.onBoss) this.onBoss(e);
-    }
-    if (notify && this.onKill) this.onKill(e, info, decision.sever);
+  kill(enemy, impact, notify = true) {
+    this.lifecycle.kill(enemy, impact, notify);
   }
-  _explodeBomber(e, scale = 1) {
-    const T = e.T;
-    const c = e.center.clone();
-    this.ctx.effects.explosion(c, T.blast * scale, INK.BLACK);
-    this.ctx.audio.explosion(c);
-    for (const P of this.targets()) {
-      const d = P.center.distanceTo(c);
-      if (P.alive && d < T.blast * scale) {
-        P.takeDamage(T.dmg * this.mods.damage * Math.sqrt(1 - d / (T.blast * scale)), c);
-        P.knockback(_v.subVectors(P.center, c).normalize(), 7);
-      }
-    }
-    this.blastEnemies(c, T.blast * scale, 70, e);
-    if (e.alive) {
-      this.population.markDead(e);
-      if (this.onKill) this.onKill(e, { source: 'blast', dir: _up.clone() }, true);
-    }
-    this.ctx.resources.release(e.root);
-    e.rootDetached = true;
-    e.deadT = 99;
+  _explodeBomber(enemy, scale = 1) {
+    this.lifecycle.explode(enemy, scale);
   }
   eye(e, out) {
     return e.eye(out);
@@ -343,31 +289,14 @@ export class EnemyManager {
     this.population.retire(9, this.releaseEntity);
   }
   // the host tells us someone died; run the gore without touching scores
-  killMirror(id, info) {
-    const e = this.byId.get(id);
-    if (!e || !e.alive) return;
-    this.kill(
-      e,
-      {
-        ...info,
-        dir: info.dir ? new THREE.Vector3().fromArray(info.dir) : _up.clone(),
-        point: info.point ? new THREE.Vector3().fromArray(info.point) : e.center.clone(),
-      },
-      false,
-    );
+  killMirror(id, impact) {
+    this.lifecycle.killMirror(id, impact);
   }
   _syncHit(e) {
     e.syncHit();
   }
   _updateDead(e, dt) {
     e.updateDead(dt);
-  }
-
-  _hideLaser(e) {
-    e.telegraph.hide();
-  }
-  _removeLaser(e) {
-    e.telegraph.dispose();
   }
 
   _animate(e, dt, point) {

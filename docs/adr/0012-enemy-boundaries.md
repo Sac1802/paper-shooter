@@ -24,6 +24,12 @@ would retain those dependencies.
   remain unchanged. RangedAttack owns burst and sniper aim progress, with explicit muzzle,
   cooldown, numeric target speed, projectile emit, damage modifier, laser and feedback ports.
   It receives neither actor nor manager and does not schedule asynchronous work.
+- EnemyAreaDamage owns enemy blast falloff and bomber player/enemy area policy through target
+  readers and damage/feedback commands. EnemyLifecycle owns ordered death, explosion retirement
+  and per-operation notification suppression. EnemyDeathFeedback owns shared death/explosion and
+  flying-fragment transfer recipes. Feedback emits the transfer event before debris registration;
+  resources remain with the fragment owner. A reproduced nested-observer case established that
+  suppressing one mirrored death must not globally suppress a different death notification.
 - EnemySimulation owns host frame phases, gravity/world integration, target separation and
   pair-separation cadence behind actor/world protocols. It retains live-array iteration so summons
   are processed in the same frame. Spawn finalization follows hit-region synchronization; target
@@ -109,7 +115,7 @@ ownership decisions. Narrow structural ports add explicit composition while allo
 collision/authority tests. Existing EnemyManager forwarding methods preserve actor/weapon callers
 until the remaining orchestration migration.
 
-This decision is incremental: the legacy manager capability binding, explosion/lifecycle orchestration, flying-body death transfer still remain in
+This decision is incremental: the legacy manager capability binding and client-frame coordination still remain in
 the legacy JavaScript coordinator. Checked queries/projectiles/model recipes do not imply that the
 manager or its composition is checked. R3 and R5 remain open until those responsibilities have their
 own contracts and owners.
