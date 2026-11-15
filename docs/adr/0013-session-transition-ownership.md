@@ -49,8 +49,8 @@ state. A generic state-machine library is unnecessary for these explicit transit
 not decide who owns network retries, map reset or input lifetimes. Separate checked owners make
 that sequencing reviewable while retaining the existing variable-step gameplay.
 
-This is incremental. Runtime composition, screens, multiplayer message dispatch, match progression
-and player/weapon adapters still have JavaScript boundaries. Multiplayer still binds gameplay
+This is incremental. Runtime composition, screens, multiplayer message dispatch, focus and loop
+adapters still have JavaScript boundaries. Multiplayer still binds gameplay
 messages, idle policy and synchronization through runtime access. Screens still combine read models,
 settings and DOM wiring. This ADR does not close all of R2 or R5.
 

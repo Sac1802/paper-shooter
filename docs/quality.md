@@ -17,16 +17,16 @@ Branch coverage is reported separately and still has room to improve in combat, 
 failure paths. Do not describe line coverage as branch coverage or lower Sonar's gate to hide a
 missing report. Sonar's own new-code/condition calculations can differ from the local total.
 
-Local whole-product measurement at `f799d3a` on 2026-11-15 with the scoped integration deadline
+Local whole-product measurement at `ee586af` on 2026-11-15 with the scoped integration deadline
 below (later CI/generated reports supersede these snapshot values):
 
 | Metric                      | Result                                                          |
 | --------------------------- | --------------------------------------------------------------- |
-| Unit/integration tests      | 351 passing across 75 files, including architecture regressions |
-| Statements                  | 93.05%                                                          |
-| Lines                       | 94.43%                                                          |
-| Functions                   | 91.56%                                                          |
-| Branches                    | 85.23%                                                          |
+| Unit/integration tests      | 369 passing across 79 files, including architecture regressions |
+| Statements                  | 93.83%                                                          |
+| Lines                       | 95.06%                                                          |
+| Functions                   | 92.52%                                                          |
+| Branches                    | 86.50%                                                          |
 | Production dependency audit | 0 known advisories at the time of inspection                    |
 
 The generated report and latest CI run are authoritative. Test seeds are fixed so procedural
@@ -45,6 +45,10 @@ rerun `pnpm audit --prod` when updating dependencies or preparing a release.
   pickups, destructibles, damage, network snapshots, lobby browsing and match results.
 - Pre-extraction weapon geometry/action-cycle, camera, grenade and grapple traces; ammunition
   conservation, reload interruption, melee windows and remote model state.
+- Pre-extraction remote/combat/pickup references: interpolation, target/guard selection, parries,
+  rope cuts, prop/blast authority, wire reports, both maps' pickup geometry/animation and resources.
+  Match/wave policy regressions cover spawn fallbacks, scoring/escaping, winning-host death,
+  fresh-input respawn, checkpoints, boss scaling, focus/reward ordering and loot thresholds.
 - Ten pre-extraction enemy archetype traces: geometry, AI/animation/projectiles, random draw order
   and death/resource retirement; isolated target queries, route/formation steering, projectile
   authority/deflection, sniper/burst cycles and presentation lifetime checks. A historical client
@@ -122,6 +126,11 @@ intermittently failed to create a WebGL context. The same failure was reproduced
 `c74df47`; it is not evidence of a map regression. CI uses an Ubuntu runner for the full three-test
 Chromium suite. All three browser tests and all three container builds passed in the
 [PR CI run](https://github.com/meyer-pidiache/papershooter/actions/runs/43590008126).
+
+The subsequent `d71857d` checkpoint passed all three Chromium tests and all three container builds
+in [CI](https://github.com/meyer-pidiache/papershooter/actions/runs/43705208363), and passed the
+unchanged [Sonar gate](https://github.com/meyer-pidiache/papershooter/actions/runs/43705208650).
+Later workflow runs remain authoritative for subsequent commits.
 
 All Docker targets are built as review images. The Node review container was run with a read-only
 filesystem/dropped capabilities and returned 200 for the site, health and synthetic coturn
