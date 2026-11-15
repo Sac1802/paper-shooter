@@ -2,7 +2,8 @@ import { SessionController } from './session-controller.js';
 import { RunReset } from './run-reset.js';
 import { createRuntime } from './runtime.js';
 import { PickupController } from './pickups.js';
-import { createFocus } from './focus.js';
+import { FocusController } from './focus.js';
+import { FocusMarker } from '../presentation/focus-marker.js';
 import { WaveController } from './waves.js';
 import { EnemyRewards } from './enemy-rewards.js';
 import { MatchController } from './match.js';
@@ -53,7 +54,29 @@ export function createApplication(options) {
     collected: (kind, point) => presentPickup(pickupFeedback, kind, runtime.state.level.key, point),
   });
   const combat = runtime.combat;
-  const focus = createFocus(runtime, {});
+  const focusMarker = new FocusMarker({
+    camera: runtime.R.camera,
+    viewport: window,
+    hud: runtime.hud,
+  });
+  const focus = new FocusController({
+    state: runtime.game.focus,
+    player: runtime.player,
+    targets: () => runtime.enemies.enemies,
+    damage: (...args) => runtime.enemies.damage(...args),
+    world: runtime.world,
+    online: runtime.online,
+    slash: () => runtime.player.slashKatana(),
+    resetCharge: () => {
+      runtime.game.katanaStreak = 0;
+    },
+    hitstop: (duration, scale) => runtime.game.hitstop(duration, scale),
+    marker: (point) => focusMarker.show(point),
+    audio,
+    hud: runtime.hud,
+    input: runtime.input,
+    effects: runtime.effects,
+  });
   const waves = new WaveController({
     state: runtime.game,
     level: () => runtime.state.level,

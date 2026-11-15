@@ -52,7 +52,7 @@ JavaScript boundaries under R5; checking the actor does not certify those caller
 
 ## Coordinator size exception
 
-The current checked `player.ts` has 458 physical / 445 code lines; its constructor has 109 code
+The current checked `player.ts` has 462 physical / 449 code lines; its constructor has 109 code
 lines. Type declarations make the public actor/component surfaces explicit. The file remains over
 the advisory size threshold and has no cyclomatic-complexity findings. The exception covers
 composition, phase order and forwarding to independent state owners, rather than movement,
@@ -65,7 +65,9 @@ scoped capabilities and reusable frames, never this facade. New gameplay calcula
 the corresponding owner. Reassess this exception when adding another actor consumer, command or
 state owner; prefer a consumer-specific protocol to expanding access to the entire facade. Keep
 the generated warnings visible. This exception does not waive R5 composition or other open review
-findings, and is not a universal recommendation for 445-line modules.
+findings, and is not a universal recommendation for 449-line modules. The focus-consumer review in
+[ADR 0019](0019-focus-policy-motion-and-marker.md) adds only an existing katana-attack command;
+focus receives no loadout or frame-builder access.
 
 ## Evidence
 

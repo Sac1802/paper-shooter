@@ -353,6 +353,10 @@ export class Player {
   lunge(speed: number) {
     this.locomotion.lunge(speed, this.forward);
   }
+  slashKatana() {
+    const blade = this.weapons[this.katanaIndex];
+    if (blade.kind === 'katana') blade.startSlash(this._weaponState(false, false, 0));
+  }
   get weapons() {
     return this.equipment.weapons;
   }

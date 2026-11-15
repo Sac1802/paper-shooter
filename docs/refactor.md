@@ -62,4 +62,6 @@ gate does not close those findings or complete the remaining gameplay/controller
   reusable retained-palette models; preserved both maps' pickup geometry/animation references.
 - Replaced wave runtime access with checked progression/spawn/checkpoint capabilities and an
   independent kill-reward owner; composition owns enemy observers and grenade transport binding.
+- Replaced focus runtime access with checked policy/motion/attack ports and a separate marker
+  projection owner; preserved the recorded two-execution chain and collision/feedback behavior.
 - Added deterministic unit/integration tests, Chromium smoke tests, coverage imports and pinned CI actions.

@@ -20,6 +20,7 @@
 | [0016](0016-match-rules-and-presentation.md)        | Match rules, phase commands and pure score presentation             | Accepted |
 | [0017](0017-pickup-policy-and-presentation.md)      | Pickup collection/authority policy, models and retained palette     | Accepted |
 | [0018](0018-wave-progression-and-rewards.md)        | Solo progression, spawn policy, reward commands and event binding   | Accepted |
+| [0019](0019-focus-policy-motion-and-marker.md)      | Focus policy, dash motion, marker projection and composition review | Accepted |
 
 Each decision records context, alternatives, consequences and evidence. Revisit a decision when its
 constraints change; retain superseded records so their reasoning remains available.
