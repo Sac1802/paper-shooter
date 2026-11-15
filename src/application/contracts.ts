@@ -1,9 +1,11 @@
+import type {
+  ApplicationInput,
+  ApplicationHud,
+  ApplicationAudio,
+  ApplicationTransport,
+} from './adapter-ports.js';
 import type { PerspectiveCamera, Scene } from 'three';
-import type { Net } from '../network/peer-transport.js';
-import type { Input } from '../platform/input.js';
 import type { PreferencePort } from '../platform/preferences.js';
-import type { HUD } from '../presentation/hud.js';
-import type { Sfx } from '../presentation/audio.js';
 
 export interface RenderingPort {
   scene: Scene;
@@ -19,10 +21,10 @@ export interface ApplicationOptions {
   canvas: HTMLCanvasElement;
   hudRoot: HTMLElement;
   renderer?: RenderingPort;
-  input?: Input;
-  hud?: HUD;
+  input?: ApplicationInput;
+  hud?: ApplicationHud;
   preferences?: PreferencePort;
-  net?: Net;
-  audio?: Sfx;
+  net?: ApplicationTransport;
+  audio?: ApplicationAudio;
   autoStart?: boolean;
 }

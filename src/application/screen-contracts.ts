@@ -27,7 +27,7 @@ export interface ScreenPorts {
   transport: {
     readonly id: string | null;
     readonly code: string | null;
-    readonly aliasCode: string | null;
+    readonly aliasCode?: string | null;
     readonly isHost: boolean;
     readonly active: boolean;
     readonly maxPlayers: number;
