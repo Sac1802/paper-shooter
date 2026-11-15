@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { PlayerQueries } from '../gameplay/combat/player-queries.js';
 import { INK } from '../shared/ink.js';
 import { rand, clamp } from '../engine/math.js';
 
@@ -45,65 +46,13 @@ export function createCombat(runtime, actions = {}) {
   // anything a bullet or a blade can hit besides enemies
   ctx.targets = () => [player, ...remote.values()];
   ctx.canHurt = (t) => online() && t !== player;
-  ctx.raycastPlayers = (o, d, maxDist) => {
-    let best = null;
-    for (const t of remote.values()) {
-      if (!t.alive || !ctx.canHurt(t)) continue;
-      for (let i = 0; i < t.hit.length; i++) {
-        const c = t.hitSpheres[i],
-          r = t.hit[i][1];
-        _v.subVectors(c, o);
-        const tca = _v.dot(d);
-        if (tca < 0 || tca > maxDist) continue;
-        const d2 = _v.lengthSq() - tca * tca;
-        if (d2 > r * r) continue;
-        const tt = tca - Math.sqrt(r * r - d2);
-        if (tt < 0) continue;
-        if (!best || tt < best.dist)
-          best = {
-            player: t,
-            part: t.hit[i][0],
-            dist: tt,
-            point: new THREE.Vector3(o.x + d.x * tt, o.y + d.y * tt, o.z + d.z * tt),
-          };
-      }
-      // a raised katana sits in front of the chest: a ray that reaches it before the body is turned aside
-      if (t.blocking) {
-        _bc.set(t.center.x + t.forward.x * 0.5, t.center.y + 0.3, t.center.z + t.forward.z * 0.5);
-        const r = 0.42;
-        _v.subVectors(_bc, o);
-        const tca = _v.dot(d);
-        if (tca > 0 && tca <= maxDist) {
-          const d2 = _v.lengthSq() - tca * tca;
-          if (d2 <= r * r) {
-            const tt = tca - Math.sqrt(r * r - d2);
-            if (tt >= 0 && (!best || tt < best.dist))
-              best = {
-                player: t,
-                part: 'blade',
-                dist: tt,
-                point: new THREE.Vector3(o.x + d.x * tt, o.y + d.y * tt, o.z + d.z * tt),
-              };
-          }
-        }
-      }
-    }
-    return best;
-  };
-  const _bc = new THREE.Vector3();
-  ctx.playersInArc = (pos, dir, range, cosHalf) => {
-    const out = [];
-    for (const t of remote.values()) {
-      if (!t.alive || !ctx.canHurt(t)) continue;
-      _v.subVectors(t.center, pos);
-      const d = _v.length();
-      if (d > range + 0.3) continue;
-      if (d > 0.3 && _v.normalize().dot(dir) < cosHalf) continue;
-      if (!world.hasLineOfSight(pos, t.center)) continue;
-      out.push(t);
-    }
-    return out;
-  };
+  const queries = new PlayerQueries(
+    () => remote.values(),
+    (target) => ctx.canHurt(target),
+    world,
+  );
+  ctx.raycastPlayers = (...args) => queries.raycast(...args);
+  ctx.playersInArc = (...args) => queries.inArc(...args);
   ctx.hitPlayer = (t, dmg, info) => {
     if (!ctx.canHurt(t) || !t.alive) return;
     // a raised katana facing you parries a slash outright and turns some bullets aside
