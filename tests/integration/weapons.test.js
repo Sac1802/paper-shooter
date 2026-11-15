@@ -20,14 +20,14 @@ describe('weapons and multiplayer models', () => {
     (Weapon) => {
       vi.useFakeTimers();
       fixture = applicationFixture();
-      const { app, ctx, player, world, enemies } = fixture;
+      const { app, gunServices, player, world, enemies } = fixture;
       app.session.begin();
       world.clear();
       world.addBox({ x: -50, y: -1, z: -50 }, { x: 50, y: 0, z: 50 });
       world.finalize();
       player.body.pos.set(0, 0, 0);
       player._updateCamera(0.1);
-      const gun = new Weapon(ctx.gunServices);
+      const gun = new Weapon(gunServices);
       const st = player._weaponState(false, false, 0);
       const total = gun.mag + gun.reserve;
       gun.fire(st);
@@ -144,8 +144,8 @@ describe('weapons and multiplayer models', () => {
 
   it('round trips snapshots, animates remote states and reconstructs a respawned model', () => {
     fixture = applicationFixture();
-    const { ctx, player } = fixture;
-    const remote = new RemotePlayer(ctx.remoteServices, 'other', 'other', 0, INK.RED);
+    const { remoteServices, player } = fixture;
+    const remote = new RemotePlayer(remoteServices, 'other', 'other', 0, INK.RED);
     player.body.pos.set(2, 0, 3);
     player.body.vel.set(2, 1, 0);
     player.grapple.state = 'on';

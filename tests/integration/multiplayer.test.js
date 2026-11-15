@@ -69,7 +69,7 @@ describe('complete multiplayer sessions through an in-memory signaling boundary'
       const remote = host.remote.get(guest.net.id);
       guest.player.shieldT = 0;
       const hp = guest.player.hp;
-      host.ctx.hitPlayer(remote, 25, {
+      host.app.combat.hitPlayer(remote, 25, {
         part: 'torso',
         source: 'rifle',
         point: remote.center,

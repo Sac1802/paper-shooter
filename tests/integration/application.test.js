@@ -137,7 +137,6 @@ describe('composed application without the GPU transport', () => {
     world.addBox({ x: -60, y: -1, z: -60 }, { x: 60, y: 0, z: 60 });
     world.finalize();
     state.nav = new NavGrid(world, { minX: -20, maxX: 20, minZ: -20, maxZ: 20 }, 2).build();
-    app.runtime.ctx.nav = state.nav;
     player.maxHp = player.hp = 100000;
     player.body.pos.set(0, 0, 0);
     for (const type of Object.keys(TYPES)) {

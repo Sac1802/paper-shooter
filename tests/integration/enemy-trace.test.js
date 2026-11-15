@@ -87,7 +87,7 @@ it.each(Object.keys(TYPES))(
   (type) => {
     vi.useFakeTimers();
     fixture = applicationFixture();
-    const { app, player, enemies, world, state, ctx, game, input } = fixture;
+    const { app, player, enemies, world, state, game, input } = fixture;
     app.session.begin();
     game.queue = [];
     game.intermission = 100000;
@@ -96,7 +96,6 @@ it.each(Object.keys(TYPES))(
     world.finalize();
     const navigation = () => {
       state.nav = new NavGrid(world, { minX: -25, maxX: 25, minZ: -25, maxZ: 25 }, 2).build();
-      ctx.nav = state.nav;
     };
     navigation();
     const movePlayer = (x, y, z) => {

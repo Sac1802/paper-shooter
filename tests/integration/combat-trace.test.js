@@ -17,7 +17,8 @@ const vector = (value) => value.toArray().map(number);
 it('preserves composed PvP guard, rope, prop, blast and shot-report outcomes', () => {
   vi.useFakeTimers();
   fixture = applicationFixture('mexico');
-  const { app, net, player, world, ctx, game, state, effects, resources, shotQueue } = fixture;
+  const { app, net, player, world, game, state, effects, resources, shotQueue } = fixture;
+  const combat = app.combat;
   const packets = [];
   for (const method of ['sendTo', 'broadcast', 'send'])
     vi.spyOn(net, method).mockImplementation((...args) => {
@@ -39,7 +40,7 @@ it('preserves composed PvP guard, rope, prop, blast and shot-report outcomes', (
   opponent.update(0.02, 0);
   const frames = [];
   function capture(label) {
-    const hit = ctx.raycastPlayers(
+    const hit = combat.raycastPlayers(
       player.eye,
       opponent.center.clone().sub(player.eye).normalize(),
       30,
@@ -68,7 +69,9 @@ it('preserves composed PvP guard, rope, prop, blast and shot-report outcomes', (
             point: vector(hit.point),
           }
         : null,
-      arc: ctx.playersInArc(player.eye, player.forward, 20, Math.cos(1)).map((target) => target.id),
+      arc: combat
+        .playersInArc(player.eye, player.forward, 20, Math.cos(1))
+        .map((target) => target.id),
       props: state.level.breakables.map((prop) => ({
         id: prop.id,
         hp: prop.hp,
@@ -125,29 +128,29 @@ it('preserves composed PvP guard, rope, prop, blast and shot-report outcomes', (
     source,
     crit: part === 'head',
   });
-  ctx.hitPlayer(opponent, 25, impact('torso'));
+  combat.hitPlayer(opponent, 25, impact('torso'));
   player.weapon.fireRay(player.eye, opponent.center.clone().sub(player.eye).normalize());
   capture('unblocked-hit-and-shot');
   opponent.blocking = true;
-  for (let attempt = 0; attempt < 10; attempt++) ctx.hitPlayer(opponent, 30, impact('blade'));
+  for (let attempt = 0; attempt < 10; attempt++) combat.hitPlayer(opponent, 30, impact('blade'));
   const parries = packets.filter((packet) => packet[2] === 'parry').map((packet) => packet[3].ret);
   expect(new Set(parries)).toEqual(new Set([true, false]));
   capture('blade-deflection');
   opponent.parryWindow = true;
-  ctx.hitPlayer(opponent, 55, impact('torso', 'katana'));
+  combat.hitPlayer(opponent, 55, impact('torso', 'katana'));
   capture('slash-parried');
   opponent.parryWindow = false;
-  ctx.hitPlayer(opponent, 55, impact('torso', 'katana'));
+  combat.hitPlayer(opponent, 55, impact('torso', 'katana'));
   opponent.grappling = true;
   opponent.gPoint.set(0, 5, -8);
-  expect(ctx.cutRopes(player.eye, player.forward, 10)).toBe(true);
+  expect(combat.cutRopes(player.eye, player.forward, 10)).toBe(true);
   capture('unguarded-slash-and-rope-cut');
   const seen = new Set();
   for (const prop of state.level.breakables)
     if (!seen.has(prop.kind)) {
       seen.add(prop.kind);
-      ctx.breakHit(prop, 1, prop.pos.clone(), new Vector3(1, 0.3, -1));
-      ctx.breakHit(prop, 10000, prop.pos.clone(), new Vector3(1, 0.3, -1));
+      combat.breakHit(prop, 1, prop.pos.clone(), new Vector3(1, 0.3, -1));
+      combat.breakHit(prop, 10000, prop.pos.clone(), new Vector3(1, 0.3, -1));
     }
   capture('prop-kinds');
   const quiet = state.level.breakables.find((prop) => prop.alive);
@@ -171,7 +174,7 @@ it('preserves composed PvP guard, rope, prop, blast and shot-report outcomes', (
   expect(enemy.hp).toBe(hpAfterOwned);
   const messages = packets.length;
   game.mode = 'solo';
-  ctx.hitPlayer(opponent, 500, impact('head'));
+  combat.hitPlayer(opponent, 500, impact('head'));
   expect(packets.length).toBe(messages);
   for (let frame = 0; frame < 80; frame++) effects.update(0.03);
   capture('effects-progress');

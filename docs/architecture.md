@@ -43,15 +43,17 @@ hooks and CI. It does not detect semantic cycles through runtime callbacks or sh
 Composition supplies commands between independent owners and adapters. SessionController owns
 run/match/menu transitions; browser controls and screens request those commands. LobbyConnection
 and HostMigration coordinate async connection/recovery through scoped transport/session ports.
-Some legacy controllers still receive runtime/action bags; an import check does not validate those
-semantic boundaries. `ApplicationOptions` defines replaceable rendering, input,
+Combat policies also have checked scoped services and an explicit composition API; they do not
+register commands on a mutable game context. Participant/level readers belong to runtime. See
+[ADR 0015](adr/0015-combat-capabilities-and-composition.md). Some legacy controllers still receive
+runtime/action bags; an import check does not validate those semantic boundaries. `ApplicationOptions` defines replaceable rendering, input,
 storage, audio and network adapters for embedding and integration tests.
 
 ## State and lifetime
 
 `createRuntime` owns one world, level, navigation grid, renderer, audio instance, input adapter,
 local player, enemy manager, connection transport, remote players and session state. Switching maps
-updates the level/navigation references in the gameplay context. Map geometry is not edited by the
+publishes its current level/navigation through live readers. Map geometry is not edited by the
 application controllers. `createApplication` wires actions before starting its animation/background
 schedulers. Its idempotent `dispose()` stops schedulers, releases listeners/connections/audio and
 disposes scene/rendering resources. Permanent page navigation and Vite teardown call it.
@@ -99,7 +101,7 @@ separate decision and regression baseline.
 
 TypeScript strict mode covers domain rules, shared contracts, physics/math, registry, network
 configuration/discovery, backend, model recipes, player/weapon components, enemy composition,
-session transitions, remote target composition and lobby connection/recovery. Legacy procedural
+session transitions, remote target/combat composition and lobby connection/recovery. Legacy procedural
 maps/effects, transport, runtime composition and several application/presentation adapters remain
 JavaScript under `allowJs` with `checkJs: false`; those boundaries are **not** fully statically checked. Tests and
 coverage include them. This is an explicit incremental typing decision, not a completed conversion

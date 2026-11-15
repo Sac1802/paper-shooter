@@ -19,5 +19,7 @@
 
 | [0014](0014-remote-replica-and-presentation.md) | Remote snapshot, interpolation and presentation ownership | Accepted |
 
+| [0015](0015-combat-capabilities-and-composition.md) | Scoped combat policy, feedback, reports and explicit composition | Accepted |
+
 Each decision records context, alternatives, consequences and evidence. Revisit a decision when its
 constraints change; retain superseded records so their reasoning remains available.

@@ -10,7 +10,7 @@ export function createMultiplayer(runtime, actions = {}) {
   const audio = runtime.audio;
   const {
     remote,
-    ctx,
+    remoteServices,
     hud,
     net,
     lobby,
@@ -66,9 +66,9 @@ export function createMultiplayer(runtime, actions = {}) {
       r.name = name;
       return r;
     }
-    const rp = new RemotePlayer(ctx.remoteServices, id, name, 0, INK.RED);
+    const rp = new RemotePlayer(remoteServices, id, name, 0, INK.RED);
     rp.onDamage = (t, amount, fromPos) => {
-      if (!ctx.canHurt(t) || !t.alive) return;
+      if (!runtime.combat.canHurt(t) || !t.alive) return;
       hud.hitmarker(false, false);
       net.sendTo(t.id, 'pdmg', {
         amount: Math.round(amount),

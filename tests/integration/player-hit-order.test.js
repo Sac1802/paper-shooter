@@ -9,7 +9,7 @@ afterEach(() => {
 });
 it('keeps the nearer player hit when a later player guards farther along the ray', () => {
   fixture = applicationFixture();
-  const { app, ctx, game, remote } = fixture;
+  const { app, game, remote } = fixture;
   game.mode = 'ffa';
   const near = app.multiplayer.addRemote('near', 'near');
   const far = app.multiplayer.addRemote('far', 'far');
@@ -19,9 +19,9 @@ it('keeps the nearer player hit when a later player guards farther along the ray
   far.update(0.02, 0);
   const origin = new Vector3(0, 1.25, 0),
     direction = new Vector3(0, 0, -1);
-  expect(ctx.raycastPlayers(origin, direction, 30)?.player.id).toBe('near');
+  expect(app.combat.raycastPlayers(origin, direction, 30)?.player.id).toBe('near');
   // Join order must not change which physical target is first along the ray.
   remote.delete('near');
   remote.set('near', near);
-  expect(ctx.raycastPlayers(origin, direction, 30)?.player.id).toBe('near');
+  expect(app.combat.raycastPlayers(origin, direction, 30)?.player.id).toBe('near');
 });

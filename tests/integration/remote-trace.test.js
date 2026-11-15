@@ -97,11 +97,11 @@ it('preserves remote snapshots, poses, weapon replacement, ragdolls and respawn 
   vi.useFakeTimers();
   fixture = applicationFixture();
   fixture.app.session.begin();
-  const { ctx, world, player, effects, resources } = fixture;
+  const { remoteServices, world, player, effects, resources } = fixture;
   world.clear();
   world.addBox({ x: -100, y: -1, z: -100 }, { x: 100, y: 0, z: 100 });
   world.finalize();
-  remote = new RemotePlayer(ctx.remoteServices, 'remote', 'paper', 0, INK.RED);
+  remote = new RemotePlayer(remoteServices, 'remote', 'paper', 0, INK.RED);
   const frames = [],
     wire = [];
   const deliver = (frame) => {

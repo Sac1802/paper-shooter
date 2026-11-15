@@ -51,4 +51,7 @@ gate does not close those findings or complete the remaining gameplay/controller
   cancelled stale results/retries/prompts and verified score transfer through three-client recovery.
 - Corrected untrusted kill-feed/scoreboard HTML and an inherited blob-boss katana death crash.
 - Added static, Node/Compose and Vercel deployment paths; retained the existing loopback VPS port.
+- Removed mutable gameplay-context registration; checked combat policies expose explicit query,
+  damage, rope, blast and prop capabilities. Fixed the reproduced cross-player guard hit-order bug
+  before extraction and preserved the composed combat reference.
 - Added deterministic unit/integration tests, Chromium smoke tests, coverage imports and pinned CI actions.

@@ -2,7 +2,6 @@ import { SessionController } from './session-controller.js';
 import { RunReset } from './run-reset.js';
 import { createRuntime } from './runtime.js';
 import { createPickups } from './pickups.js';
-import { createCombat } from './combat.js';
 import { createFocus } from './focus.js';
 import { createWaves } from './waves.js';
 import { createMatch } from './match.js';
@@ -14,7 +13,9 @@ import { createLoop } from './loop.js';
 // Callbacks connect controllers explicitly; factories register callbacks but do not start the loop.
 /** @param {import('./contracts.js').ApplicationOptions} options */
 export function createApplication(options) {
-  const runtime = createRuntime(options);
+  const runtime = createRuntime(options, {
+    spawnPickup: (...args) => pickups.spawnPickup(...args),
+  });
   const audio = runtime.audio;
   const debug = {
     ...runtime,
@@ -38,9 +39,7 @@ export function createApplication(options) {
   };
   window.__game = debug;
   const pickups = createPickups(runtime, {});
-  const combat = createCombat(runtime, {
-    spawnPickup: (...args) => pickups.spawnPickup(...args),
-  });
+  const combat = runtime.combat;
   const focus = createFocus(runtime, {});
   const waves = createWaves(runtime, {
     spawnPickup: (...args) => pickups.spawnPickup(...args),

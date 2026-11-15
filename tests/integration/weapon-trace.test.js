@@ -50,14 +50,14 @@ it.each([Rifle, Shotgun, Sniper, Revolver, Katana].map((Weapon) => [Weapon.name,
     vi.useFakeTimers();
     const fixture = applicationFixture();
     try {
-      const { app, player, ctx, world, resources } = fixture;
+      const { app, player, gunServices, bladeServices, world, resources } = fixture;
       app.session.begin();
       world.clear();
       world.addBox({ x: -50, y: -1, z: -50 }, { x: 50, y: 0, z: 50 });
       world.finalize();
       player.body.pos.set(0, 0, 0);
       player._updateCamera(0.1);
-      const weapon = new Weapon(Weapon === Katana ? ctx.bladeServices : ctx.gunServices);
+      const weapon = new Weapon(Weapon === Katana ? bladeServices : gunServices);
       resources.track(weapon.root);
       weapon.equip();
       const shape = geometry(weapon.root),
