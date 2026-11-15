@@ -3,15 +3,18 @@
 // target (body, center, eye, hit spheres, takeDamage) so the rest of the game does not care
 // whether it is shooting at a bot or a friend.
 import * as THREE from 'three';
+import { RemoteGrapple } from '../presentation/remote-grapple.js';
 import { RemoteInterpolation } from './remote/interpolation.js';
 import { makeInkMaterial, setFill } from '../presentation/ink/materials.js';
 import { INK } from '../shared/ink.js';
 import { buildHumanoid, buildWeaponProp } from '../presentation/models/characters.js';
-import { clamp, damp } from '../engine/math.js';
+import {
+  RemoteAnimation,
+  remoteAnimationFrame,
+} from '../presentation/characters/remote-animation.js';
 
 const _v = new THREE.Vector3(),
-  _v2 = new THREE.Vector3(),
-  _up = new THREE.Vector3(0, 1, 0);
+  _v2 = new THREE.Vector3();
 const WEAPON_KINDS = ['rifle', 'shotgun', 'sniper', 'blade'];
 const HIT = [
   ['head', 0.3],
@@ -72,8 +75,8 @@ export class RemotePlayer {
     this.blocking = false;
     this.aiming = false;
     this.firing = false;
-    this.phase = 0;
-    this.walk = 0;
+    this.animation = new RemoteAnimation();
+    this.animationFrame = remoteAnimationFrame(this.body.vel, this.body.pos);
     this.flashT = 0;
     this.deadT = 0;
     this.kills = 0;
@@ -96,21 +99,9 @@ export class RemotePlayer {
     this.grappling = false;
     this.gPoint = new THREE.Vector3();
     this._buildModel();
-    // the grapple rope: a thin line from the hand to wherever the hook is
-    this.rope = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.03, 0.03, 1, 5),
-      makeInkMaterial({ ink: INK.BLACK }),
-    );
-    this.rope.visible = false;
-    services.scene.add(this.rope);
-    services.resources.track(this.rope);
-    this.hook = new THREE.Mesh(
-      new THREE.SphereGeometry(0.12, 6, 5),
-      makeInkMaterial({ ink: INK.BLACK, fill: true }),
-    );
-    this.hook.visible = false;
-    services.scene.add(this.hook);
-    services.resources.track(this.hook);
+    this.ropeView = new RemoteGrapple(services.scene, services.resources);
+    this.rope = this.ropeView.rope;
+    this.hook = this.ropeView.hook;
   }
   _buildModel() {
     const model = buildHumanoid(this.mat, this.solid, this.T);
@@ -130,6 +121,7 @@ export class RemotePlayer {
       makeInkMaterial({ ink: this.ink, fill: true, side: THREE.DoubleSide }),
     );
     this.tagG.add(flag);
+    this.animationRig = { root: this.root, joints: this.J, tag: this.tagG, face: this.face };
     this.corpse = false;
     this.services.resources.track(this.root);
   }
@@ -317,92 +309,31 @@ export class RemotePlayer {
     this._updateRope();
   }
   _updateRope() {
-    const on = this.grappling && this.alive && !this.away;
-    this.rope.visible = on;
-    this.hook.visible = on;
-    if (!on) return;
-    _v.set(
-      this.body.pos.x + this.right.x * 0.35,
-      this.body.pos.y + 1.25,
-      this.body.pos.z + this.right.z * 0.35,
+    this.ropeView.update(
+      this.grappling && this.alive && !this.away,
+      this.body.pos,
+      this.right,
+      this.gPoint,
     );
-    _v2.subVectors(this.gPoint, _v);
-    const len = _v2.length();
-    if (len < 0.05) {
-      this.rope.visible = false;
-      return;
-    }
-    this.rope.position.copy(_v).addScaledVector(_v2, 0.5);
-    this.rope.scale.set(1, len, 1);
-    this.rope.quaternion.setFromUnitVectors(_up, _v2.divideScalar(len));
-    this.hook.position.copy(this.gPoint);
   }
+
   _animate(dt) {
-    const J = this.J,
-      b = this.body;
-    const sp = Math.hypot(b.vel.x, b.vel.z);
-    this.walk = damp(this.walk, clamp(sp / 4, 0, 1), 10, dt);
-    const w = this.walk;
-    this.phase += dt * (sp * 2.2 + (sp > 0.4 ? 3 : 0));
-    const s = Math.sin(this.phase),
-      c = Math.cos(this.phase);
-    if (!this.alive) {
-      // slumped on the page until they respawn
-      J.hips.parent.rotation.x = damp(J.hips.parent.rotation.x, Math.PI / 2, 5, dt);
-      if (this.face) {
-        this.face.eyes.visible = false;
-        this.face.xeyes.visible = true;
-      }
-      return;
-    }
-    J.hips.parent.rotation.x = damp(J.hips.parent.rotation.x, 0, 8, dt);
-    if (this.face) {
-      this.face.eyes.visible = true;
-      this.face.xeyes.visible = false;
-    }
-    J.legL.rotation.x = s * 0.9 * w;
-    J.legR.rotation.x = -s * 0.9 * w;
-    J.shinL.rotation.x = Math.max(0, c) * 1.1 * w;
-    J.shinR.rotation.x = Math.max(0, -c) * 1.1 * w;
-    if (!b.onGround) {
-      J.legL.rotation.x = -0.5;
-      J.legR.rotation.x = 0.6;
-      J.shinL.rotation.x = 1.0;
-      J.shinR.rotation.x = 0.5;
-    }
-    // guns are carried up and forward, two hands on them, tilting with where they look; the
-    // blade hangs at the side until it is raised to guard
-    const blade = this.weaponIndex === WEAPON_KINDS.length - 1;
-    const aim = blade ? 0 : this.aiming ? 1 : sp > 6.5 ? 0.8 : 0.95;
-    const look = clamp(this.pitch, -1.1, 1.1);
-    if (blade) {
-      const g = this.blocking ? 1 : 0;
-      J.armR.rotation.x = -0.9 - g * 0.9 - s * 0.6 * w * (1 - g);
-      J.armR.rotation.z = -0.3 - g * 0.5;
-      J.foreR.rotation.x = -1.0 - g * 0.6;
-      J.armL.rotation.x = s * 0.8 * w * (1 - g) - g * 1.4;
-      J.foreL.rotation.x = -0.5;
-    } else {
-      J.armR.rotation.x = (-1.35 - look * 0.85) * aim - s * 0.6 * w * (1 - aim);
-      J.armR.rotation.z = -0.2 * (1 - aim);
-      J.foreR.rotation.x = -0.2;
-      J.armL.rotation.x = (-1.25 - look * 0.85) * aim + s * 0.6 * w * (1 - aim);
-      J.armL.rotation.y = 0.55 * aim;
-      J.foreL.rotation.x = -0.45;
-    }
-    J.torso.rotation.x = -0.2 * w + (this.sliding ? 0.5 : 0) + (this.crouching ? 0.25 : 0);
-    J.torso.rotation.y = -0.3 * aim;
-    J.hips.position.y = (this.crouching ? 0.55 : 0.86) + Math.abs(c) * 0.07 * w;
-    J.headG.rotation.x = clamp(-this.pitch, -0.7, 0.7) * 0.7;
-    const localEye = this.services.localEye();
-    this.tagG.rotation.y =
-      -this.root.rotation.y +
-      (localEye ? Math.atan2(localEye.x - this.body.pos.x, localEye.z - this.body.pos.z) : 0);
+    const frame = this.animationFrame;
+    frame.onGround = this.body.onGround;
+    frame.alive = this.alive;
+    frame.blade = this.weaponIndex === WEAPON_KINDS.length - 1;
+    frame.aiming = this.aiming;
+    frame.blocking = this.blocking;
+    frame.pitch = this.pitch;
+    frame.sliding = this.sliding;
+    frame.crouching = this.crouching;
+    frame.localEye = this.alive ? this.services.localEye() : null;
+    this.animation.update(frame, this.animationRig, dt);
   }
+
   dispose() {
     if (this.root) this.services.resources.release(this.root);
-    this.services.resources.release(this.rope);
-    this.services.resources.release(this.hook);
+    this.ropeView.dispose();
     this.releaseMaterials();
   }
 }
