@@ -88,7 +88,7 @@ it.each(Object.keys(TYPES))(
     vi.useFakeTimers();
     fixture = applicationFixture();
     const { app, player, enemies, world, state, ctx, game, input } = fixture;
-    app.controls.begin();
+    app.session.begin();
     game.queue = [];
     game.intermission = 100000;
     world.clear();

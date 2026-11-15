@@ -7,7 +7,7 @@ it('preserves the movement trace for walking, sprint, jump, double jump, dash an
   const fixture = applicationFixture();
   try {
     const { app, world, player, input } = fixture;
-    app.controls.begin();
+    app.session.begin();
     world.clear();
     world.addBox({ x: -60, y: -1, z: -60 }, { x: 60, y: 0, z: 60 });
     world.finalize();

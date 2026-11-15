@@ -8,7 +8,7 @@ it('preserves first-person projection, stride, recoil, damage, guard and death f
   const fixture = applicationFixture();
   try {
     const { app, player, input, effects, world } = fixture;
-    app.controls.begin();
+    app.session.begin();
     world.clear();
     world.addBox({ x: -60, y: -1, z: -60 }, { x: 60, y: 0, z: 60 });
     world.finalize();
@@ -58,7 +58,7 @@ it('preserves first-person projection, stride, recoil, damage, guard and death f
     run({}, 5);
     player.die();
     run({}, 20);
-    app.controls.resetGame();
+    app.session.resetGame();
     capture();
     expect(trace).toMatchSnapshot();
   } finally {

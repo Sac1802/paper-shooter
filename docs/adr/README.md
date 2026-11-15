@@ -15,5 +15,7 @@
 | [0011](0011-weapon-mechanics-and-presentation.md) | Independent mechanics, impact rules and weapon presentation         | Accepted |
 | [0012](0012-enemy-boundaries.md)                  | Enemy queries, projectile simulation and character presentation     | Accepted |
 
+| [0013](0013-session-transition-ownership.md) | Session transition, reset and asynchronous lifetime ownership | Accepted |
+
 Each decision records context, alternatives, consequences and evidence. Revisit a decision when its
 constraints change; retain superseded records so their reasoning remains available.

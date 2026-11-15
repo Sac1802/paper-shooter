@@ -46,7 +46,7 @@ it('preserves compact enemy snapshots, mirror interpolation/poses and corpse ret
   vi.useFakeTimers();
   fixture = applicationFixture();
   const { app, enemies } = fixture;
-  app.controls.begin();
+  app.session.begin();
   enemies.mirror = true;
   const actors = Object.entries(TYPES).map(([kind, definition], index) => ({
     definition,

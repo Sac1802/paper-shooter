@@ -20,7 +20,7 @@ describe('composed application without the GPU transport', () => {
   it('starts solo, moves, jumps, switches weapons, pauses and resumes', () => {
     fixture = applicationFixture();
     const { app, game, player, input, frame, renderer } = fixture;
-    app.controls.begin();
+    app.session.begin();
     expect(game).toMatchObject({ state: 'play', mode: 'solo', wave: 1 });
     const start = player.body.pos.clone();
     input.keys.forward = true;
@@ -39,9 +39,9 @@ describe('composed application without the GPU transport', () => {
     frame();
     expect(player.weapon.kind).toBe('shotgun');
     input.keys.slot2 = false;
-    app.controls.pause();
+    app.session.pause();
     expect(game.state).toBe('pause');
-    app.controls.resume();
+    app.session.resume();
     expect(game.state).toBe('play');
     expect(renderer.render).toHaveBeenCalled();
   });
@@ -49,7 +49,7 @@ describe('composed application without the GPU transport', () => {
   it('retains Mexico, collects pickups and rebuilds broken props on reset', () => {
     fixture = applicationFixture('mexico');
     const { app, state, world, player, frame, game } = fixture;
-    app.controls.beginAtWave(5);
+    app.session.beginAtWave(5);
     expect(state.level.key).toBe('mexico');
     expect(game.queue[0]).toBe('boss');
     player.hp = 10;
@@ -66,7 +66,7 @@ describe('composed application without the GPU transport', () => {
     app.combat.breakProp(prop, new Vector3(1, 0, 0), true);
     expect(prop.alive).toBe(false);
     expect(world.boxes.length).toBe(count - 1);
-    app.controls.resetGame();
+    app.session.resetGame();
     expect(state.level).not.toBe(oldLevel);
     expect(state.level.key).toBe('mexico');
     expect(world.boxes.length).toBe(count);
@@ -77,7 +77,7 @@ describe('composed application without the GPU transport', () => {
   it('advances waves, records rewards and handles solo death/checkpoints', () => {
     fixture = applicationFixture();
     const { app, game, enemies, player, frame, values } = fixture;
-    app.controls.begin();
+    app.session.begin();
     app.waves.updateWaves(3);
     expect(enemies.alive).toBe(1);
     const enemy = enemies.enemies[0];
@@ -95,21 +95,21 @@ describe('composed application without the GPU transport', () => {
     expect(game.intermission).toBe(8);
     app.waves.updateWaves(9);
     expect(game.wave).toBe(2);
-    app.controls.jumpToWave(10);
+    app.session.jumpToWave(10);
     expect(values.get('paper_checkpoint')).toBe('10');
     player.takeDamage(1000, null);
     expect(game.state).toBe('dying');
     frame(0.05, 36);
     expect(game.state).toBe('dead');
     expect(document.querySelector('#hud').textContent).toContain('ERASED');
-    app.controls.begin();
+    app.session.begin();
     expect(player.alive).toBe(true);
   });
 
   it('executes a focus dash and ends focus for online play', () => {
     fixture = applicationFixture();
     const { app, game, player, enemies, frame } = fixture;
-    app.controls.begin();
+    app.session.begin();
     const enemy = enemies.spawn('grunt', player.body.pos.clone().add(new Vector3(0, 0, -4)));
     enemy.state = 'hunt';
     enemy.center.copy(enemy.body.pos).add(new Vector3(0, 1, 0));
@@ -131,7 +131,7 @@ describe('composed application without the GPU transport', () => {
   it('runs every enemy archetype through AI, projectiles, hits and cleanup', () => {
     fixture = applicationFixture();
     const { app, player, enemies, world, state, frame } = fixture;
-    app.controls.begin();
+    app.session.begin();
     // Use a simple collision arena to exercise AI independently from randomly chosen map spawns.
     world.clear();
     world.addBox({ x: -60, y: -1, z: -60 }, { x: 60, y: 0, z: 60 });
@@ -167,7 +167,7 @@ describe('composed application without the GPU transport', () => {
     net.peer = { destroy() {} };
     lobby.players.set('host', { name: 'player' });
     lobby.players.set('other', { name: '<img src=x>' });
-    app.controls.hostStart();
+    app.session.hostStart();
     expect(game.mode).toBe('ffa');
     expect(player.shieldT).toBe(2);
     expect(scores.size).toBe(2);
@@ -182,7 +182,7 @@ describe('composed application without the GPU transport', () => {
     scores.get('host').kills = 20;
     app.match.checkWin();
     expect(game.state).toBe('over');
-    app.screens.toLobbyScreen();
+    app.session.toLobbyScreen();
     expect(game.state).toBe('lobby');
   });
 
@@ -206,10 +206,10 @@ describe('composed application without the GPU transport', () => {
     game.state = 'lobby';
     app.screens.renderLobby();
     expect(hud.el.panel.textContent).toContain('LOBBY');
-    app.screens.toMainMenu();
+    app.session.toMainMenu();
     expect(state.screen).toBe('main');
-    app.controls.beginAtWave(5);
-    app.controls.pause();
+    app.session.beginAtWave(5);
+    app.session.pause();
     document.querySelector('#menuBtn').click();
     expect(game.state).toBe('start');
   });

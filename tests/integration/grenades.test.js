@@ -8,7 +8,7 @@ it('preserves charged and remote grenade trajectories, blast damage and reset be
   const fixture = applicationFixture();
   try {
     const { app, player, input, world, effects } = fixture;
-    app.controls.begin();
+    app.session.begin();
     const frame = (dt = 1 / 60, count = 1) => {
       for (let i = 0; i < count; i++) {
         input.update(dt);
@@ -58,7 +58,7 @@ it('preserves charged and remote grenade trajectories, blast damage and reset be
     expect({ packets, trace }).toMatchSnapshot();
     expect(player.nades).toHaveLength(0);
     player.throwGrenade({ pos: [30, 10, 30], vel: [0, 0, 0] });
-    app.controls.resetGame();
+    app.session.resetGame();
     expect(player.nades).toHaveLength(0);
     expect(player.grenades).toBe(3);
   } finally {

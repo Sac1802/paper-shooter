@@ -22,7 +22,6 @@ export function createMultiplayer(runtime, actions = {}) {
     effects,
     online,
     shotQueue,
-    setArena,
   } = runtime;
   const {
     renderLobby,
@@ -40,7 +39,7 @@ export function createMultiplayer(runtime, actions = {}) {
     tallyDeath,
     applyScores,
     sortedScores,
-    resetGame,
+    returnOnline,
     unlockButtons,
   } = actions;
   // ---------------- networking ----------------
@@ -546,19 +545,10 @@ export function createMultiplayer(runtime, actions = {}) {
     for (const id of [...remote.keys()]) removeRemote(id);
     lobby.players.clear();
     scores.clear();
-    hud.setBoard(null);
-    if (game.state !== 'start') {
-      game.state = 'start';
-      game.mode = 'solo';
-      setArena(false);
-      resetGame();
-      hud.setGameplayVisible(false);
-    }
-    game.menu = false;
     lobby.status = reason || '';
-    runtime.state.screen = 'online';
-    showStart();
+    returnOnline();
   }
+
   async function createLobby(isPublic) {
     const task = tasks.begin('connect');
     if (!task) return;

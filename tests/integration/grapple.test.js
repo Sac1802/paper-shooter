@@ -7,7 +7,7 @@ it('preserves hook flight, attachment, reeling and jump release', () => {
   const fixture = applicationFixture();
   try {
     const { app, player, input, world, effects } = fixture;
-    app.controls.begin();
+    app.session.begin();
     world.clear();
     world.addBox({ x: -60, y: -1, z: -60 }, { x: 60, y: 0, z: 60 });
     world.addBox({ x: -10, y: 0, z: -16 }, { x: 10, y: 20, z: -15 });

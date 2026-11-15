@@ -12,7 +12,7 @@ afterEach(() => {
 it('retires an enemy death once without negative population or duplicate rewards', () => {
   vi.useFakeTimers();
   fixture = applicationFixture();
-  fixture.app.controls.begin();
+  fixture.app.session.begin();
   const { enemies } = fixture;
   const enemy = enemies.spawn('grunt', new Vector3(0, 0, -4)),
     onKill = vi.spyOn(enemies, 'onKill');
@@ -26,7 +26,7 @@ it('retires an enemy death once without negative population or duplicate rewards
 it('ignores a queued hit against an enemy from a cleared population', () => {
   vi.useFakeTimers();
   fixture = applicationFixture();
-  fixture.app.controls.begin();
+  fixture.app.session.begin();
   const { enemies, effects, hud } = fixture;
   const enemy = enemies.spawn('grunt', new Vector3(0, 0, -4)),
     health = enemy.hp;

@@ -19,6 +19,26 @@ function deferred() {
 }
 
 describe('session work cannot outlive leave, replacement or application disposal', () => {
+  it('retires the delayed match prompt on disposal', async () => {
+    vi.useFakeTimers();
+    fixture = applicationFixture();
+    fixture.app.session.startMatch(false);
+    fixture.input.usingGamepad = false;
+    fixture.app.dispose();
+    const render = vi.spyOn(fixture.hud, 'showScreen');
+    await vi.advanceTimersByTimeAsync(300);
+    expect(render).not.toHaveBeenCalled();
+  });
+  it('does not show an earlier match prompt over a new solo run', async () => {
+    vi.useFakeTimers();
+    fixture = applicationFixture();
+    fixture.app.session.startMatch(false);
+    fixture.app.session.toMainMenu();
+    fixture.app.session.begin();
+    fixture.input.usingGamepad = false;
+    await vi.advanceTimersByTimeAsync(300);
+    expect(fixture.game).toMatchObject({ state: 'play', mode: 'solo', menu: false });
+  });
   it('ignores a host completion after leaving the online screen', async () => {
     fixture = applicationFixture();
     const { app, net, game } = fixture;

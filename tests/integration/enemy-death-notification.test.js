@@ -12,7 +12,7 @@ afterEach(() => {
 it('suppresses only the mirrored death notification, preserving an observer-triggered independent kill', () => {
   vi.useFakeTimers();
   fixture = applicationFixture();
-  fixture.app.controls.begin();
+  fixture.app.session.begin();
   const { enemies } = fixture;
   const boss = enemies.spawn('boss', new Vector3(0, 0, -8)),
     minion = enemies.spawn('grunt', new Vector3(4, 0, -8));

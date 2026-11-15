@@ -21,7 +21,7 @@ describe('weapons and multiplayer models', () => {
       vi.useFakeTimers();
       fixture = applicationFixture();
       const { app, ctx, player, world, enemies } = fixture;
-      app.controls.begin();
+      app.session.begin();
       world.clear();
       world.addBox({ x: -50, y: -1, z: -50 }, { x: 50, y: 0, z: 50 });
       world.finalize();
@@ -58,7 +58,7 @@ describe('weapons and multiplayer models', () => {
   it('automatically reloads an empty magazine after its owned delay', () => {
     vi.useFakeTimers();
     fixture = applicationFixture();
-    fixture.app.controls.begin();
+    fixture.app.session.begin();
     const gun = fixture.player.weapon;
     gun.mag = 1;
     gun.fire(fixture.player._weaponState(false, false, 0));
@@ -70,7 +70,7 @@ describe('weapons and multiplayer models', () => {
   it('cancels pending automatic reload when the application is disposed', () => {
     vi.useFakeTimers();
     fixture = applicationFixture();
-    fixture.app.controls.begin();
+    fixture.app.session.begin();
     const gun = fixture.player.weapon;
     gun.mag = 1;
     gun.fire(fixture.player._weaponState(false, false, 0));
@@ -84,7 +84,7 @@ describe('weapons and multiplayer models', () => {
   it('does not start a melee attack from input after the local player dies', () => {
     vi.useFakeTimers();
     fixture = applicationFixture();
-    fixture.app.controls.begin();
+    fixture.app.session.begin();
     fixture.player.switchTo(3);
     const slash = vi.spyOn(fixture.player.weapon, 'startSlash');
     fixture.player.die();
@@ -98,7 +98,7 @@ describe('weapons and multiplayer models', () => {
     vi.useFakeTimers();
     fixture = applicationFixture();
     const { app, player, input, enemies, frame, world } = fixture;
-    app.controls.begin();
+    app.session.begin();
     world.clear();
     world.addBox({ x: -50, y: -1, z: -50 }, { x: 50, y: 0, z: 50 });
     world.finalize();

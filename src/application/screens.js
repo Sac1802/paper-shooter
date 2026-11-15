@@ -5,19 +5,7 @@ import { escapeHtml as esc } from '../presentation/html';
 
 export function createScreens(runtime, actions = {}) {
   const audio = runtime.audio;
-  const {
-    hud,
-    applySettings,
-    preferences,
-    player,
-    net,
-    lobby,
-    game,
-    online,
-    setArena,
-    input,
-    remote,
-  } = runtime;
+  const { hud, applySettings, preferences, player, net, lobby, game, online } = runtime;
   const {
     cancelPending,
     lobbyRows,
@@ -32,7 +20,7 @@ export function createScreens(runtime, actions = {}) {
     beginAtWave,
     begin,
     sortedScores,
-    resetGame,
+    toMainMenu,
   } = actions;
   // ---------------- screens ----------------
   function settingsHTML() {
@@ -338,31 +326,6 @@ export function createScreens(runtime, actions = {}) {
         toMainMenu();
       });
   }
-  function toMainMenu() {
-    game.state = 'start';
-    game.mode = 'solo';
-    game.menu = false;
-    setArena(false);
-    resetGame();
-    audio.reelLoop(false);
-    input.exitLock();
-    hud.setGameplayVisible(false);
-    runtime.state.screen = 'main';
-    showStart();
-  }
-  function toLobbyScreen() {
-    net.inMatch = false;
-    for (const r of remote.values()) r.lastSeen = performance.now();
-    setArena(true);
-    resetGame();
-    game.state = 'lobby';
-    game.over = null;
-    game.menu = false;
-    hud.setGameplayVisible(false);
-    hud.setBoard(null);
-    runtime.state.screen = 'lobby';
-    showStart();
-  }
 
   return {
     settingsHTML,
@@ -387,7 +350,5 @@ export function createScreens(runtime, actions = {}) {
     showDead,
     menuBtnHTML,
     wireMenuBtn,
-    toMainMenu,
-    toLobbyScreen,
   };
 }

@@ -42,7 +42,7 @@ describe('complete multiplayer sessions through an in-memory signaling boundary'
       await flushMessages();
       expect(host.lobby.players.size).toBe(2);
       expect(guest.lobby.players.size).toBe(2);
-      host.app.controls.hostStart();
+      host.app.session.hostStart();
       await flushMessages();
       expect(guest.game).toMatchObject({ mode: 'ffa', state: 'play' });
       expect(guest.state.level.key).toBe('mexico');
@@ -102,7 +102,7 @@ describe('complete multiplayer sessions through an in-memory signaling boundary'
       expect(guest.game.state).toBe('over');
       expect(guest.game.over.id).toBe(host.net.id);
       host.net.send('backtolobby', {});
-      host.app.screens.toLobbyScreen();
+      host.app.session.toLobbyScreen();
       await flushMessages();
       expect(guest.game.state).toBe('lobby');
       await guest.app.multiplayer.leaveOnline('done');
@@ -119,7 +119,7 @@ describe('complete multiplayer sessions through an in-memory signaling boundary'
     const code = host.net.code;
     await guest.app.multiplayer.joinLobby(code);
     await flushMessages();
-    host.app.controls.hostStart();
+    host.app.session.hostStart();
     await flushMessages();
     host.net.leave();
     await flushMessages();

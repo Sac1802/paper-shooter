@@ -15,7 +15,7 @@ it.each(['lunge', 'standoff', 'parry'])(
     vi.useFakeTimers();
     fixture = applicationFixture();
     const { app, world, enemies, player, game } = fixture;
-    app.controls.begin();
+    app.session.begin();
     game.queue = [];
     game.intermission = 100000;
     world.clear();

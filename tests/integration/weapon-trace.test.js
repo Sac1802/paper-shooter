@@ -51,7 +51,7 @@ it.each([Rifle, Shotgun, Sniper, Revolver, Katana].map((Weapon) => [Weapon.name,
     const fixture = applicationFixture();
     try {
       const { app, player, ctx, world, resources } = fixture;
-      app.controls.begin();
+      app.session.begin();
       world.clear();
       world.addBox({ x: -50, y: -1, z: -50 }, { x: 50, y: 0, z: 50 });
       world.finalize();
