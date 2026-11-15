@@ -66,5 +66,5 @@ test covers invalid/disabled map keys. Existing settings, application, session c
 multiplayer tests remain in force. These checks do not establish real-network latency, GPU/input
 acceptance or complete the independent review deferred by the user.
 
-Runtime/entry composition, multiplayer message/idle/synchronization binding, loop binding,
+Runtime/entry composition, multiplayer message/idle/synchronization binding,
 concrete input/HUD/audio/transport options and extracted effects remain open work.

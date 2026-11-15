@@ -17,16 +17,16 @@ Branch coverage is reported separately and still has room to improve in combat, 
 failure paths. Do not describe line coverage as branch coverage or lower Sonar's gate to hide a
 missing report. Sonar's own new-code/condition calculations can differ from the local total.
 
-Local whole-product measurement at `0327ab0` on 2026-11-15 with the scoped integration deadline
+Local whole-product measurement at `390fd25` on 2026-11-15 with the scoped integration deadline
 below (later CI/generated reports supersede these snapshot values):
 
 | Metric                      | Result                                                          |
 | --------------------------- | --------------------------------------------------------------- |
-| Unit/integration tests      | 396 passing across 90 files, including architecture regressions |
-| Statements                  | 94.49%                                                          |
-| Lines                       | 95.65%                                                          |
-| Functions                   | 93.58%                                                          |
-| Branches                    | 87.41%                                                          |
+| Unit/integration tests      | 403 passing across 91 files, including architecture regressions |
+| Statements                  | 94.66%                                                          |
+| Lines                       | 95.78%                                                          |
+| Functions                   | 93.65%                                                          |
+| Branches                    | 87.83%                                                          |
 | Production dependency audit | 0 known advisories at the time of inspection                    |
 
 The generated report and latest CI run are authoritative. Test seeds are fixed so procedural
@@ -63,6 +63,10 @@ rerun `pnpm audit --prod` when updating dependencies or preparing a release.
   test runs screen navigation/browsing/records against ports without a browser/game runtime;
   isolated browse tests cover coalescing, fresh names, active sessions, retry and retirement.
   Two reproduced disposal regressions prevent late lookup success/error from publishing to the UI.
+- Frame characterization preserves the 50 ms cap, phase capture, real/scaled deltas, simulation/
+  network/presentation order, online death/menu updates, mouse/controller scoreboard behavior,
+  strict result-return delays and background steps without a second animation chain. Scheduling
+  cancellation and scoped frame composition are checked alongside existing composed traces.
 - Ten pre-extraction enemy archetype traces: geometry, AI/animation/projectiles, random draw order
   and death/resource retirement; isolated target queries, route/formation steering, projectile
   authority/deflection, sniper/burst cycles and presentation lifetime checks. A historical client
@@ -141,9 +145,9 @@ intermittently failed to create a WebGL context. The same failure was reproduced
 Chromium suite. All three browser tests and all three container builds passed in the
 [PR CI run](https://github.com/meyer-pidiache/papershooter/actions/runs/43590008126).
 
-The subsequent `430e41e` checkpoint passed all three Chromium tests and all three container builds
-in [CI](https://github.com/meyer-pidiache/papershooter/actions/runs/43710504543), and passed the
-unchanged [Sonar gate](https://github.com/meyer-pidiache/papershooter/actions/runs/43710504536).
+The subsequent `c15ad85` checkpoint passed all three Chromium tests and all three container builds
+in [CI](https://github.com/meyer-pidiache/papershooter/actions/runs/43717293638), and passed the
+unchanged [Sonar gate](https://github.com/meyer-pidiache/papershooter/actions/runs/43717293575).
 Later workflow runs remain authoritative for subsequent commits.
 
 All Docker targets are built as review images. The Node review container was run with a read-only

@@ -53,6 +53,6 @@ isolated panel tests cover menu-event isolation and binding screens without sett
 Existing initial save loading and procedural random draws are unchanged.
 
 Screen routing, map/best state and lobby browsing subsequently gained checked owners in
-[ADR 0021](0021-screen-policy-view-and-browse-lifetime.md). Multiplayer/frame binding and runtime
+[ADR 0021](0021-screen-policy-view-and-browse-lifetime.md). Multiplayer binding and runtime
 composition remain unchecked JavaScript. Input/HUD/audio/transport options still name concrete
 adapters; replacing the preference option alone does not close R2 or R5.
