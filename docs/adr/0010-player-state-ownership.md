@@ -43,24 +43,29 @@ prototype patches and method chunks bound to `Player` would obscure state owners
 components introduce contracts and forwarding code, but can be exercised without DOM, audio,
 networking or full application setup.
 
-The legacy `Player` entry point currently remains JavaScript. Its public actor commands/properties
-are used by targeting, weapons and application controllers. Checking the components does not check
-that composition; completing its consumer contracts is part of review finding R5.
+Player now also has a checked actor/service surface. Its capabilities are grouped as environment,
+input, presentation, weapons, grapple queries and a death command; it receives no application
+runtime or manager. Equipment preserves its concrete loadout type through a generic parameter,
+while leaf components consume only their own protocols. Guard feedback explicitly models the
+absence of a blade response. Application runtime construction and controller adapters remain
+JavaScript boundaries under R5; checking the actor does not certify those callers.
 
-## Temporary coordinator exception
+## Coordinator size exception
 
-At checkpoint `c9aed64`, `player.js` was 428 physical / 415 code lines. Its explicit equipment
-and grenade disposal command now brings it to 434 physical / 421 code lines; its constructor is
-118 code lines. The added disposal method delegates lifetime cleanup and adds no gameplay rule. Those exceed the normal review signals. Its remaining role is composition, phase ordering
-and the existing actor facade; the calculations above are independently owned. There are no
-remaining function-complexity findings in this coordinator or its extracted player components.
+The current checked `player.ts` has 458 physical / 445 code lines; its constructor has 109 code
+lines. Type declarations make the public actor/component surfaces explicit. The file remains over
+the advisory size threshold and has no cyclomatic-complexity findings. The exception covers
+composition, phase order and forwarding to independent state owners, rather than movement,
+weapon, grapple or health calculations. The earlier JavaScript checkpoint had 434 physical /
+421 code lines and a 118-line constructor.
 
-Temporarily retain explicit forwarding and construction together while R5 replaces the unchecked
-composition contract. Splitting the facade through mixins or forwarding-method files would make
-navigation harder without separating another responsibility. This exception permits no new gameplay
-calculation in the coordinator. Reassess it during R5, whenever another component/public command is
-added, or if a second actor consumer needs a different interface. It does not waive the outstanding
-enemy/weapon decomposition or certify the complete refactor.
+Retain explicit forwarding instead of mixins or separate getter files: distributing those members
+would obscure the actor protocol without creating another state owner. Leaf components receive
+scoped capabilities and reusable frames, never this facade. New gameplay calculations must go in
+the corresponding owner. Reassess this exception when adding another actor consumer, command or
+state owner; prefer a consumer-specific protocol to expanding access to the entire facade. Keep
+the generated warnings visible. This exception does not waive R5 composition or other open review
+findings, and is not a universal recommendation for 445-line modules.
 
 ## Evidence
 

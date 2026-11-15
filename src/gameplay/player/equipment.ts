@@ -27,14 +27,14 @@ export interface EquipmentFeedback {
 }
 
 // Selection, temporary melee and input dispatch belong to the loadout, not to locomotion.
-export class Equipment {
+export class Equipment<W extends EquippableWeapon = EquippableWeapon> {
   index = 0;
   readonly meleeIndex: number;
   private previousIndex = 0;
   private returnTime = 0;
   firing = false;
   constructor(
-    readonly weapons: readonly EquippableWeapon[],
+    readonly weapons: readonly W[],
     private readonly feedback: EquipmentFeedback,
   ) {
     if (!weapons.length) throw new Error('A loadout requires at least one weapon');

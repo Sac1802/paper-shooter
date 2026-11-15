@@ -139,7 +139,7 @@ export function makeCombatFeedback(
   ports: PlayerFeedbackPorts,
   pose: CombatPose,
   camera: CameraFeedbackPort,
-  weapon: () => GuardResponsePort,
+  weapon: () => GuardResponsePort | null,
   onDeath: () => void,
 ): PlayerCombatFeedback {
   return {
@@ -154,7 +154,7 @@ export function makeCombatFeedback(
       }
     },
     deflected: (projectile, perfect) => {
-      weapon().onDeflect?.(perfect);
+      weapon()?.onDeflect?.(perfect);
       if (perfect) ports.audio.perfectParry();
       else ports.audio.parry();
       ports.effects.sparks(
@@ -175,7 +175,7 @@ export function makeCombatFeedback(
       ports.score(perfect ? 60 : 15, perfect ? 'PERFECT PARRY' : 'BLOCKED');
     },
     meleeBlocked: () => {
-      weapon().onDeflect?.(true);
+      weapon()?.onDeflect?.(true);
       ports.audio.parry();
       ports.hitstop(0.06, 0.15);
       ports.effects.sparks(

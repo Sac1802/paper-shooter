@@ -159,7 +159,32 @@ export function createRuntime(options) {
     input,
     hitstop: (duration, scale) => game.hitstop(duration, scale),
   };
-  const player = (ctx.player = new Player(ctx));
+  const player = (ctx.player = new Player({
+    environment: {
+      scene: R.scene,
+      camera: R.camera,
+      resources,
+      world,
+      spawnPoint: () => ctx.level.playerStart,
+    },
+    input,
+    feedback: {
+      audio,
+      input,
+      hud,
+      effects,
+      score: (points, label) => game.addScore(points, label),
+      hitstop: (duration, scale) => game.hitstop(duration, scale),
+    },
+    weapons: { gun: ctx.gunServices, blade: ctx.bladeServices },
+    grappleQueries: {
+      raycastEnemy: (...args) => enemies.raycast(...args),
+      enemies: () => enemies.enemies,
+      landmarks: () => ctx.level,
+      yank: (...args) => enemies.yank(...args),
+    },
+    died: () => game.onPlayerDeath(),
+  }));
   player.name = state.myName;
   const net = options.net ?? new Net();
   const remote = new Map();

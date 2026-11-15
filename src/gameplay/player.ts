@@ -1,4 +1,11 @@
 // Compose player state owners, preserve phase order and expose the actor command surface.
+import type { PlayerServices, PlayerHitReceipt } from './player/services.js';
+import type { Body } from '../engine/physics.js';
+import type { FirstPersonFrame } from '../presentation/first-person.js';
+import type { WeaponPose } from '../domain/weapon-frame.js';
+import type { GrenadePacket, GrenadePose } from './player/grenades.js';
+import type { DeflectedProjectile } from './player/combat-state.js';
+import type { Gun } from './weapons/guns.js';
 import { PlayerCombat } from './player/combat-state.js';
 import {
   makeCombatFeedback,
@@ -21,15 +28,38 @@ import { clamp } from '../engine/math.js';
 const STAND_H = 1.75;
 
 export class Player {
-  constructor(ctx) {
-    this.ctx = ctx;
-    this.camera = ctx.camera;
-    this.body = makeBody(ctx.level.playerStart, 0.35, STAND_H, 0.55);
+  readonly camera: THREE.PerspectiveCamera;
+  readonly body: Body;
+  readonly view: FirstPersonView;
+  readonly eye: THREE.Vector3;
+  readonly center: THREE.Vector3;
+  readonly forward: THREE.Vector3;
+  readonly right: THREE.Vector3;
+  private readonly viewFrame: FirstPersonFrame;
+  readonly rig: THREE.Group;
+  readonly equipment: Equipment<Gun | Katana>;
+  private readonly equipmentPose: WeaponPose;
+  private readonly grenadePose: GrenadePose;
+  readonly grenadeSystem: Grenades;
+  readonly grappleSystem: Grapple;
+  readonly locomotion: Locomotion;
+  readonly combat: PlayerCombat;
+  readonly isLocal = true;
+  team = 0;
+  name = 'you';
+  shieldT = 0;
+  lastHitBy: string | null = null;
+  lastHit: PlayerHitReceipt | null = null;
+  onFall: (() => void) | null = null;
+  constructor(private readonly services: PlayerServices) {
+    const { environment, input, feedback } = services;
+    this.camera = environment.camera;
+    this.body = makeBody(environment.spawnPoint(), 0.35, STAND_H, 0.55);
     this.view = new FirstPersonView(
       this.camera,
       this.body,
-      (dt) => ctx.effects.sampleShake(dt),
-      (gain) => ctx.audio.footstep(gain),
+      (dt) => feedback.effects.sampleShake(dt),
+      (gain) => feedback.audio.footstep(gain),
     );
     this.eye = this.view.eye;
     this.center = this.view.center;
@@ -47,23 +77,23 @@ export class Player {
     };
     this.rig = new THREE.Group();
     this.camera.add(this.rig);
-    ctx.scene.add(this.camera);
+    environment.scene.add(this.camera);
     const weapons = [
-      new Rifle(ctx.gunServices),
-      new Shotgun(ctx.gunServices),
-      new Sniper(ctx.gunServices),
-      new Katana(ctx.bladeServices),
+      new Rifle(services.weapons.gun),
+      new Shotgun(services.weapons.gun),
+      new Sniper(services.weapons.gun),
+      new Katana(services.weapons.blade),
     ];
     for (const weapon of weapons) this.rig.add(weapon.root);
     this.equipment = new Equipment(weapons, {
       selected: (weapon, silent) => {
-        if (!silent) ctx.audio.switchWeapon();
-        ctx.hud.setWeapon(weapon.name, weapon.hint);
-        ctx.hud.setCrosshairMode(weapon.kind === 'katana' ? 'katana' : '');
+        if (!silent) feedback.audio.switchWeapon();
+        feedback.hud.setWeapon(weapon.name, weapon.hint);
+        feedback.hud.setCrosshairMode(weapon.kind === 'katana' ? 'katana' : '');
       },
       sights: (ads, scope) => {
-        ctx.hud.setAds(ads);
-        ctx.hud.setScope(scope);
+        feedback.hud.setAds(ads);
+        feedback.hud.setScope(scope);
       },
     });
     this.equipmentPose = {
@@ -72,7 +102,7 @@ export class Player {
       grounded: false,
       speed: 0,
       sliding: false,
-      lookDelta: ctx.input.look,
+      lookDelta: input.look,
       strafe: 0,
       bobPhase: 0,
       bobAmt: 0,
@@ -80,49 +110,32 @@ export class Player {
       alive: true,
     };
 
-    this.isLocal = true;
-    this.team = 0;
-    this.name = 'you';
     this.grenadePose = {
       eye: this.eye,
       right: this.right,
       forward: this.forward,
       velocity: this.body.vel,
     };
-    const feedback = {
-      audio: ctx.audio,
-      input: ctx.input,
-      hud: ctx.hud,
-      effects: ctx.effects,
-      score: (points, label) => ctx.game.addScore(points, label),
-      hitstop: (duration, scale) => ctx.game.hitstop(duration, scale),
-    };
     const weaponFeedback = () => this.weapon;
     this.grenadeSystem = new Grenades(
-      ctx.world,
-      new GrenadeVisuals(ctx.scene, ctx.world, ctx.resources),
+      environment.world,
+      new GrenadeVisuals(environment.scene, environment.world, environment.resources),
       makeGrenadeFeedback(feedback, weaponFeedback),
     );
     this.grappleSystem = new Grapple(
       this.body,
       { eye: this.eye, center: this.center, forward: this.forward, right: this.right },
       {
-        world: ctx.world,
-        queries: {
-          raycastEnemy: (origin, direction, distance) =>
-            ctx.enemies.raycast(origin, direction, distance),
-          enemies: () => ctx.enemies.enemies,
-          landmarks: () => ctx.level,
-          yank: (enemy, toward) => ctx.enemies.yank(enemy, toward),
-        },
-        view: new GrappleVisuals(ctx.scene),
+        world: environment.world,
+        queries: services.grappleQueries,
+        view: new GrappleVisuals(environment.scene),
         feedback: makeGrappleFeedback(feedback, this.view, weaponFeedback),
       },
     );
     this.locomotion = new Locomotion(
       this.body,
       { center: this.center, right: this.right },
-      { world: ctx.world, spawnPoint: () => ctx.level.playerStart },
+      { world: environment.world, spawnPoint: environment.spawnPoint },
       this.grappleSystem,
       makeMovementFeedback(feedback, { center: this.center, right: this.right }, this.view, () => {
         this.takeDamage(20, null);
@@ -137,10 +150,13 @@ export class Player {
         feedback,
         { eye: this.eye, center: this.center, forward: this.forward, right: this.right },
         this.view,
-        () => this.weapon,
+        () => {
+          const weapon = this.weapon;
+          return weapon.kind === 'katana' ? weapon : null;
+        },
         () => {
           this.detachGrapple(false);
-          ctx.game.onPlayerDeath();
+          services.died();
         },
       ),
     );
@@ -151,7 +167,7 @@ export class Player {
     this.grenadeSystem.onExplosion = null;
     this.equipment.dispose();
   }
-  reset(pos) {
+  reset(pos: THREE.Vector3) {
     this.grenadeSystem.cancelCharge();
     const b = this.body;
     b.pos.copy(pos);
@@ -170,13 +186,13 @@ export class Player {
   get hp() {
     return this.combat.hp;
   }
-  set hp(value) {
+  set hp(value: number) {
     this.combat.hp = value;
   }
   get maxHp() {
     return this.combat.maxHp;
   }
-  set maxHp(value) {
+  set maxHp(value: number) {
     this.combat.maxHp = value;
   }
   get alive() {
@@ -185,13 +201,13 @@ export class Player {
   get regenDelay() {
     return this.combat.regenDelay;
   }
-  set regenDelay(value) {
+  set regenDelay(value: number) {
     this.combat.regenDelay = value;
   }
   get regenRate() {
     return this.combat.regenRate;
   }
-  set regenRate(value) {
+  set regenRate(value: number) {
     this.combat.regenRate = value;
   }
   get isBlocking() {
@@ -203,16 +219,16 @@ export class Player {
   get parryWindow() {
     return this.combat.parryWindow;
   }
-  takeDamage(amount, from = null) {
+  takeDamage(amount: number, from: THREE.Vector3 | null = null) {
     this.combat.takeDamage(amount, from);
   }
-  knockback(direction, amount) {
+  knockback(direction: THREE.Vector3, amount: number) {
     this.combat.knockback(direction, amount);
   }
-  tryDeflect(projectile) {
+  tryDeflect(projectile: DeflectedProjectile) {
     return this.combat.tryDeflect(projectile);
   }
-  tryBlockMelee(enemy) {
+  tryBlockMelee(enemy: { center: THREE.Vector3 }) {
     return this.combat.tryBlockMelee(enemy);
   }
   die() {
@@ -221,13 +237,13 @@ export class Player {
   get yaw() {
     return this.view.yaw;
   }
-  set yaw(value) {
+  set yaw(value: number) {
     this.view.yaw = value;
   }
   get pitch() {
     return this.view.pitch;
   }
-  set pitch(value) {
+  set pitch(value: number) {
     this.view.pitch = value;
   }
   get speed() {
@@ -239,17 +255,17 @@ export class Player {
   get flashFx() {
     return this.view.flashFx;
   }
-  recoil(p, y) {
+  recoil(p: number, y: number) {
     this.view.recoil(p, y);
   }
-  kickFov(value) {
+  kickFov(value: number) {
     this.view.kickFov(value);
   }
-  idleCam(time) {
+  idleCam(time: number) {
     this.view.idle(time);
     this.rig.visible = false;
   }
-  _updateCamera(dt) {
+  _updateCamera(dt: number) {
     const frame = this.viewFrame;
     frame.alive = this.alive;
     frame.crouching = this.crouching;
@@ -264,7 +280,7 @@ export class Player {
   get crouching() {
     return this.locomotion.crouching;
   }
-  set crouching(value) {
+  set crouching(value: boolean) {
     this.locomotion.crouching = value;
   }
   get sliding() {
@@ -276,13 +292,13 @@ export class Player {
   get gravityScale() {
     return this.locomotion.gravityScale;
   }
-  set gravityScale(value) {
+  set gravityScale(value: number) {
     this.locomotion.gravityScale = value;
   }
   get dashLock() {
     return this.locomotion.dashLock;
   }
-  set dashLock(value) {
+  set dashLock(value: boolean) {
     this.locomotion.dashLock = value;
   }
   get _aiming() {
@@ -300,13 +316,13 @@ export class Player {
   get grapStam() {
     return this.grappleSystem.stamina;
   }
-  detachGrapple(boost) {
+  detachGrapple(boost: boolean) {
     this.grappleSystem.detach(boost);
   }
   get grenades() {
     return this.grenadeSystem.stock;
   }
-  set grenades(value) {
+  set grenades(value: number) {
     this.grenadeSystem.stock = value;
   }
   get maxGrenades() {
@@ -318,23 +334,23 @@ export class Player {
   get onThrow() {
     return this.grenadeSystem.onThrow;
   }
-  set onThrow(handler) {
+  set onThrow(handler: Grenades['onThrow']) {
     this.grenadeSystem.onThrow = handler;
   }
   clearNades() {
     this.grenadeSystem.clear();
   }
-  throwGrenade(remote = null, charge = 0) {
+  throwGrenade(remote: GrenadePacket | null = null, charge = 0) {
     this.grenadeSystem.throw(remote, charge, this.grenadePose);
   }
-  updateNades(dt) {
+  updateNades(dt: number) {
     this.grenadeSystem.update(dt);
   }
 
   aimDir(spread = 0) {
     return this.view.aimDir(spread);
   }
-  lunge(speed) {
+  lunge(speed: number) {
     this.locomotion.lunge(speed, this.forward);
   }
   get weapons() {
@@ -352,14 +368,14 @@ export class Player {
   get firing() {
     return this.equipment.firing;
   }
-  switchTo(index, silent = false) {
+  switchTo(index: number, silent = false) {
     this.equipment.switchTo(index, silent);
   }
   addAmmoAll(fraction = 0.5) {
     this.equipment.addAmmo(fraction);
   }
 
-  update(dt) {
+  update(dt: number) {
     this.combat.age(dt);
     if (!this.alive) {
       this._updateDead(dt);
@@ -367,15 +383,15 @@ export class Player {
     }
     this.rig.visible = true;
     if (this._updateLook(dt)) return;
-    const motion = this.locomotion.read(dt, this.ctx.input, this.yaw, !!this.weapon.isGun);
+    const motion = this.locomotion.read(dt, this.services.input, this.yaw, !!this.weapon.isGun);
     this.combat.coolBlock(dt);
     this.locomotion.accelerate(dt, motion);
-    this.locomotion.jump(dt, this.ctx.input, motion);
-    this.locomotion.integrate(dt, this.ctx.input, motion);
+    this.locomotion.jump(dt, this.services.input, motion);
+    this.locomotion.integrate(dt, this.services.input, motion);
     const speed = this._recoverMovement(dt, motion.sprinting);
     this.grenadeSystem.updateInput(
       dt,
-      this.ctx.input.down('grenade'),
+      this.services.input.down('grenade'),
       this.alive,
       this.dashLock,
       this.grenadePose,
@@ -383,7 +399,7 @@ export class Player {
     this._updateWeaponInput(dt, motion.sprinting, motion.aiming, speed);
   }
 
-  _updateDead(dt) {
+  _updateDead(dt: number) {
     this.view.sink(dt);
     this.locomotion.fall(dt);
     this.view.updateDirections();
@@ -393,8 +409,8 @@ export class Player {
     return;
   }
 
-  _updateLook(dt) {
-    this.view.look(this.ctx.input.look, this._aiming, !!this.weapon.scope);
+  _updateLook(dt: number) {
+    this.view.look(this.services.input.look, this._aiming, !!this.weapon.scope);
     if (this.locomotion.freezeIfLocked()) {
       this._updateCamera(dt);
       this.weapon.animate(dt, this._weaponState(false, false, 0));
@@ -402,7 +418,7 @@ export class Player {
     }
     return false;
   }
-  _recoverMovement(dt, sprinting) {
+  _recoverMovement(dt: number, sprinting: boolean) {
     const b = this.body;
 
     this.combat.recover(dt, this._sprinting, this.grapple.state === 'idle');
@@ -415,20 +431,23 @@ export class Player {
     return hs2;
   }
 
-  _updateWeaponInput(dt, sprinting, aiming, speed) {
-    this.equipment.update(dt, this.ctx.input, this._equipmentState(sprinting, aiming, speed));
+  _updateWeaponInput(dt: number, sprinting: boolean, aiming: boolean, speed: number) {
+    this.equipment.update(dt, this.services.input, this._equipmentState(sprinting, aiming, speed));
   }
-  _weaponState(sprinting, aiming, speed) {
-    return this.equipment.frame(this.ctx.input, this._equipmentState(sprinting, aiming, speed));
+  _weaponState(sprinting: boolean, aiming: boolean, speed: number) {
+    return this.equipment.frame(
+      this.services.input,
+      this._equipmentState(sprinting, aiming, speed),
+    );
   }
-  _equipmentState(sprinting, aiming, speed) {
+  _equipmentState(sprinting: boolean, aiming: boolean, speed: number): WeaponPose {
     const state = this.equipmentPose;
     state.aiming = aiming;
     state.sprinting = sprinting;
     state.grounded = this.body.onGround;
     state.speed = speed;
     state.sliding = this.sliding;
-    state.lookDelta = this.ctx.input.look;
+    state.lookDelta = this.services.input.look;
     state.strafe = this._mv.x;
     state.bobPhase = this.view.bobPhase;
     state.bobAmt = this.view.bobAmt;
