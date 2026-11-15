@@ -123,6 +123,16 @@ uses live readers, while platform scheduling returns explicit cancellation witho
 handles. The captured phase/scale and real/scaled-clock ordering remain unchanged. See
 [ADR 0022](adr/0022-frame-policy-projection-and-scheduling.md).
 
+Multiplayer composition supplies checked idle, replica synchronization, match clock, incoming combat,
+remote feedback and roster owners with consumed protocols. The transport determines callback
+payloads from decoded message kinds and enforces host authority before dispatch. Rejoin and roster
+identity changes retain ordering and score transfer; incoming damage records attribution before
+actor commands. Neither policy nor feedback receives the whole runtime. See
+[ADR 0023](adr/0023-multiplayer-idle-replication-and-clock.md),
+[ADR 0024](adr/0024-incoming-combat-policy-and-feedback.md),
+[ADR 0025](adr/0025-remote-roster-reconciliation.md) and
+[ADR 0026](adr/0026-checked-multiplayer-composition.md), including reviewed composition exceptions.
+
 ## Paradigms and patterns
 
 - Pure typed functions describe wave plans, scores, clocks, map lookup and input validation. Random
@@ -140,7 +150,7 @@ handles. The captured phase/scale and real/scaled-clock ordering remain unchange
 
 TypeScript strict mode covers domain rules, shared contracts, physics/math, registry, network
 configuration/discovery, backend, model recipes, player/weapon components, enemy composition,
-session transitions, frame composition/policy/interaction/presentation, screen views/navigation/browsing/records, user settings, focus/wave/reward/match/pickup rules and presentation, remote target/combat composition and lobby connection/recovery. Legacy procedural
+session transitions, multiplayer composition/roster/idle/replication/clock/combat feedback, frame composition/policy/interaction/presentation, screen views/navigation/browsing/records, user settings, focus/wave/reward/match/pickup rules and presentation, remote target/combat composition and lobby connection/recovery. Legacy procedural
 maps/effects, transport, runtime composition and several application/presentation adapters remain
 JavaScript under `allowJs` with `checkJs: false`; those boundaries are **not** fully statically checked. Tests and
 coverage include them. This is an explicit incremental typing decision, not a completed conversion
@@ -148,9 +158,9 @@ of every source file. See [ADR 0003](adr/0003-modular-architecture.md).
 
 ## Remaining decomposition
 
-Runtime composition and multiplayer
-message/idle/synchronization policy still need narrower
-checked boundaries. The enemy subsystem now has checked composition and separate behavior,
+Entry/runtime composition and concrete input/HUD/audio/transport option types still need narrower
+checked boundaries. Multiplayer composition now supplies independent checked owners without runtime
+access; its small supply/prop/fall packet adapters remain explicit and require review as they grow. The enemy subsystem now has checked composition and separate behavior,
 simulation, replication and presentation owners. Extracted effects remain JavaScript, and some
 map/engine/input content still needs complexity review. File length is a review signal; splitting
 at an arbitrary limit does not establish ownership. A passed coverage/quality gate does not close

@@ -72,4 +72,8 @@ gate does not close those findings or complete the remaining gameplay/controller
 - Replaced loop runtime access with checked frame composition, integration, interaction,
   presentation and cancellable scheduling; preserved captured phases, real/scaled clocks and
   a single animation chain under background stepping.
+- Replaced multiplayer runtime access with checked composition, roster reconciliation, incoming
+  combat policy/feedback, idle, replica synchronization and clock owners. Preserved late-join payload
+  order and reconnecting score retention. Fixed reproduced retired-channel packet dispatch and
+  inherited-property weapon/kill-label lookups separately from extraction.
 - Added deterministic unit/integration tests, Chromium smoke tests, coverage imports and pinned CI actions.
