@@ -3,10 +3,11 @@
 // target (body, center, eye, hit spheres, takeDamage) so the rest of the game does not care
 // whether it is shooting at a bot or a friend.
 import * as THREE from 'three';
+import { RemoteInterpolation } from './remote/interpolation.js';
 import { makeInkMaterial, setFill } from '../presentation/ink/materials.js';
 import { INK } from '../shared/ink.js';
 import { buildHumanoid, buildWeaponProp } from '../presentation/models/characters.js';
-import { clamp, damp, angleLerp } from '../engine/math.js';
+import { clamp, damp } from '../engine/math.js';
 
 const _v = new THREE.Vector3(),
   _v2 = new THREE.Vector3(),
@@ -71,8 +72,6 @@ export class RemotePlayer {
     this.blocking = false;
     this.aiming = false;
     this.firing = false;
-    this.snapA = null;
-    this.snapB = null;
     this.phase = 0;
     this.walk = 0;
     this.flashT = 0;
@@ -93,6 +92,7 @@ export class RemotePlayer {
     this.hit = HIT;
     this.hitSpheres = HIT.map(() => new THREE.Vector3());
     this.vel = new THREE.Vector3();
+    this.interpolation = new RemoteInterpolation(this.body, this.vel);
     this.grappling = false;
     this.gPoint = new THREE.Vector3();
     this._buildModel();
@@ -220,20 +220,15 @@ export class RemotePlayer {
     buildWeaponProp(gun, this.mat, this.solid, { weapon: WEAPON_KINDS[i] || 'rifle' });
     this.services.resources.track(gun);
   }
+  get snapA() {
+    return this.interpolation.previous;
+  }
+  get snapB() {
+    return this.interpolation.next;
+  }
   push(snap, t) {
     if (!snap) return;
-    this.snapA = this.snapB || {
-      p: new THREE.Vector3(snap[0], snap[1], snap[2]),
-      yaw: snap[3],
-      pitch: snap[4],
-      t: t - 0.07,
-    };
-    this.snapB = {
-      p: new THREE.Vector3(snap[0], snap[1], snap[2]),
-      yaw: snap[3],
-      pitch: snap[4],
-      t,
-    };
+    const latest = this.interpolation.push(snap, t);
     this.setWeapon(snap[5]);
     const f = snap[6];
     this.crouching = !!(f & 1);
@@ -258,11 +253,11 @@ export class RemotePlayer {
     if (wasAlive && !this.alive) this.deadT = 0;
     if (this.alive && this.corpse) {
       this._buildModel();
-      this.snapA = null;
-      this.body.pos.copy(this.snapB.p);
+      this.interpolation.clearPrevious();
+      this.body.pos.copy(latest.p);
     }
     if (this.root && !this.root.visible && !this.away) {
-      this.body.pos.copy(this.snapB.p);
+      this.body.pos.copy(latest.p);
       this.root.visible = true;
     }
     if (this.root && this.away) this.root.visible = false;
@@ -291,19 +286,10 @@ export class RemotePlayer {
       this.flashT -= dt;
       if (this.flashT <= 0) setFill(this.mat, false);
     }
-    if (this.snapB) {
-      const A = this.snapA || this.snapB;
-      const span = Math.max(0.02, this.snapB.t - A.t);
-      const tt = now - 0.08;
-      const k = clamp((tt - A.t) / span, 0, 1);
-      _v.lerpVectors(A.p, this.snapB.p, k);
-      const late = tt - this.snapB.t;
-      if (late > 0) _v.addScaledVector(this.vel, Math.min(late, 0.35));
-      if (_v.distanceToSquared(this.body.pos) > 36) this.body.pos.copy(_v);
-      else this.body.pos.lerp(_v, 1 - Math.exp(-dt * 22));
-      this.body.vel.copy(this.vel);
-      this.yaw = angleLerp(A.yaw, this.snapB.yaw, k);
-      this.pitch = A.pitch + (this.snapB.pitch - A.pitch) * k;
+    const angles = this.interpolation.update(dt, now);
+    if (angles) {
+      this.yaw = angles.yaw;
+      this.pitch = angles.pitch;
     }
     this.speed = this.body.vel.length();
     this.body.height = this.crouching ? 1.05 : 1.75;
