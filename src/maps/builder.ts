@@ -1,12 +1,24 @@
 import * as THREE from 'three';
 import { makeInkMaterial } from '../presentation/ink/materials.js';
 import { INK } from '../shared/ink.js';
+import type {
+  MapWorld,
+  Level,
+  BoxOptions,
+  StairOptions,
+  CylinderOptions,
+  SphereOptions,
+  PlaneOptions,
+  WallGap,
+} from './map-contracts.js';
+export type { Level } from './map-contracts.js';
 
+import { wallPieces } from './wall-gaps.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-export function createBuilder(scene, world) {
-  const geos = {};
-  const L = {
+export function createBuilder(scene: THREE.Scene, world: MapWorld) {
+  const geos: Record<string, THREE.BufferGeometry[]> = {};
+  const L: Level = {
     rings: [],
     spawns: [],
     snipers: [],
@@ -20,73 +32,79 @@ export function createBuilder(scene, world) {
     breakables: [],
     key: 'district',
   };
-  const addGeo = (g, ink) => (geos[ink] || (geos[ink] = [])).push(g);
-  const collider = (x, y, z, w, h, d, o = {}) =>
+  const addGeo = (g: THREE.BufferGeometry, ink: number) => (geos[ink] || (geos[ink] = [])).push(g);
+  const collider = (
+    x: number,
+    y: number,
+    z: number,
+    w: number,
+    h: number,
+    d: number,
+    o: BoxOptions = {},
+  ) =>
     world.addBox(
       { x: x - w / 2, y, z: z - d / 2 },
       { x: x + w / 2, y: y + h, z: z + d / 2 },
       { noNav: !!o.noNav, noShoot: !!o.noShoot, noGrapple: !!o.noGrapple, tag: o.tag },
     );
-  function box(x, y, z, w, h, d, o = {}) {
+  function box(
+    x: number,
+    y: number,
+    z: number,
+    w: number,
+    h: number,
+    d: number,
+    o: BoxOptions = {},
+  ) {
     const g = new THREE.BoxGeometry(w, h, d);
     g.translate(x, y + h / 2, z);
     addGeo(g, o.ink ?? INK.BLUE);
     if (!o.noCollide) collider(x, y, z, w, h, d, o);
   }
-  const slab = (x1, z1, x2, z2, y, t, o = {}) =>
-    box((x1 + x2) / 2, y - t, (z1 + z2) / 2, x2 - x1, t, z2 - z1, o); // top surface at y
-  // Wall pieces along an axis with rectangular gaps [a1, a2, yBottom = 0, yTop = h]; gaps may overlap.
-  function wallPieces(a1, a2, h, gaps) {
-    const xs = new Set([a1, a2]);
-    for (const g of gaps) {
-      xs.add(Math.min(Math.max(g[0], a1), a2));
-      xs.add(Math.min(Math.max(g[1], a1), a2));
-    }
-    const sorted = [...xs].sort((a, b) => a - b);
-    const runs = new Map();
-    const out = [];
-    for (let i = 0; i < sorted.length - 1; i++) {
-      const s1 = sorted[i],
-        s2 = sorted[i + 1];
-      if (s2 - s1 < 0.005) continue;
-      const mid = (s1 + s2) / 2;
-      const cuts = gaps
-        .filter((g) => g[0] <= mid && g[1] >= mid)
-        .map((g) => [g[2] ?? 0, g[3] ?? h])
-        .sort((a, b) => a[0] - b[0]);
-      const pieces = [];
-      let y = 0;
-      for (const [gb, gt] of cuts) {
-        if (gb > y + 0.005) pieces.push([y, gb]);
-        y = Math.max(y, gt);
-      }
-      if (y < h - 0.005) pieces.push([y, h]);
-      const keys = new Set();
-      for (const [yb, yt] of pieces) {
-        const k = yb.toFixed(3) + ',' + yt.toFixed(3);
-        keys.add(k);
-        const r = runs.get(k);
-        if (r && Math.abs(r[1] - s1) < 0.005) r[1] = s2;
-        else runs.set(k, [s1, s2, yb, yt]);
-      }
-      for (const [k, r] of [...runs])
-        if (!keys.has(k)) {
-          out.push(r);
-          runs.delete(k);
-        }
-    }
-    for (const r of runs.values()) out.push(r);
-    return out;
-  }
-  function wallX(x1, x2, z, y, h, t, gaps = [], o = {}) {
+  const slab = (
+    x1: number,
+    z1: number,
+    x2: number,
+    z2: number,
+    y: number,
+    t: number,
+    o: BoxOptions = {},
+  ) => box((x1 + x2) / 2, y - t, (z1 + z2) / 2, x2 - x1, t, z2 - z1, o); // top surface at y
+  function wallX(
+    x1: number,
+    x2: number,
+    z: number,
+    y: number,
+    h: number,
+    t: number,
+    gaps: readonly WallGap[] = [],
+    o: BoxOptions = {},
+  ) {
     for (const [a, b, yb, yt] of wallPieces(x1, x2, h, gaps))
       box((a + b) / 2, y + yb, z, b - a, yt - yb, t, o);
   }
-  function wallZ(z1, z2, x, y, h, t, gaps = [], o = {}) {
+  function wallZ(
+    z1: number,
+    z2: number,
+    x: number,
+    y: number,
+    h: number,
+    t: number,
+    gaps: readonly WallGap[] = [],
+    o: BoxOptions = {},
+  ) {
     for (const [a, b, yb, yt] of wallPieces(z1, z2, h, gaps))
       box(x, y + yb, (a + b) / 2, t, yt - yb, b - a, o);
   }
-  function stairs(x, y, z, dir, steps, width, o = {}) {
+  function stairs(
+    x: number,
+    y: number,
+    z: number,
+    dir: '+x' | '-x' | '+z' | '-z',
+    steps: number,
+    width: number,
+    o: StairOptions = {},
+  ) {
     const rise = o.rise ?? 4 / 14,
       run = o.run ?? 0.45;
     const dx = dir === '+x' ? 1 : dir === '-x' ? -1 : 0,
@@ -101,7 +119,7 @@ export function createBuilder(scene, world) {
     return { x: x + dx * steps * run, z: z + dz * steps * run, y: y + steps * rise };
   }
   // railing along an axis-aligned segment: visual posts + bar, one collider
-  function rail(x1, z1, x2, z2, y, o = {}) {
+  function rail(x1: number, z1: number, x2: number, z2: number, y: number, o: BoxOptions = {}) {
     const len = Math.hypot(x2 - x1, z2 - z1);
     const ax = Math.abs(x2 - x1) > Math.abs(z2 - z1);
     const cx = (x1 + x2) / 2,
@@ -117,18 +135,18 @@ export function createBuilder(scene, world) {
     }
     collider(cx, y, cz, ax ? len : 0.12, 1.0, ax ? 0.12 : len, { noNav: true, noShoot: true });
   }
-  function cyl(x, y, z, r, h, o = {}) {
+  function cyl(x: number, y: number, z: number, r: number, h: number, o: CylinderOptions = {}) {
     const g = new THREE.CylinderGeometry(r, r, h, o.seg ?? 12);
     g.translate(x, y + h / 2, z);
     addGeo(g, o.ink ?? INK.BLUE);
     if (!o.noCollide) collider(x, y, z, r * 1.6, h, r * 1.6, o);
   }
-  function sphere(x, y, z, r, o = {}) {
+  function sphere(x: number, y: number, z: number, r: number, o: SphereOptions = {}) {
     const g = new THREE.SphereGeometry(r, o.seg ?? 10, o.seg ?? 8);
     g.translate(x, y, z);
     addGeo(g, o.ink ?? INK.BLUE);
   }
-  function ring(x, y, z, axis = 'z') {
+  function ring(x: number, y: number, z: number, axis: 'x' | 'y' | 'z' = 'z') {
     const g = new THREE.TorusGeometry(0.6, 0.1, 8, 20);
     if (axis === 'x') g.rotateY(Math.PI / 2);
     else if (axis === 'y') g.rotateX(Math.PI / 2);
@@ -136,13 +154,14 @@ export function createBuilder(scene, world) {
     addGeo(g, INK.ORANGE);
     L.rings.push(new THREE.Vector3(x, y, z));
   }
-  const spawn = (x, y, z) => L.spawns.push(new THREE.Vector3(x, y, z));
-  const sniper = (x, y, z) => L.snipers.push(new THREE.Vector3(x, y, z));
-  const pickup = (x, y, z) => L.pickups.push(new THREE.Vector3(x, y, z));
+  const spawn = (x: number, y: number, z: number) => L.spawns.push(new THREE.Vector3(x, y, z));
+  const sniper = (x: number, y: number, z: number) => L.snipers.push(new THREE.Vector3(x, y, z));
+  const pickup = (x: number, y: number, z: number) => L.pickups.push(new THREE.Vector3(x, y, z));
   // ---------------- shared finish ----------------
   function finish() {
     for (const ink in geos) {
       const merged = mergeGeometries(geos[ink], false);
+      if (!merged) throw new Error('Map geometry has incompatible attributes');
       const mesh = new THREE.Mesh(merged, makeInkMaterial({ ink: Number(ink) }));
       mesh.matrixAutoUpdate = false;
       scene.add(mesh);
@@ -152,7 +171,7 @@ export function createBuilder(scene, world) {
     return L;
   }
   // a paper plane that loops overhead, purely decorative
-  function planes(n, baseR, baseH, o = {}) {
+  function planes(n: number, baseR: number, baseH: number, o: PlaneOptions = {}) {
     const sc = o.scale || 1;
     for (let i = 0; i < n; i++) {
       const g = new THREE.ConeGeometry(1.2 * sc, 4 * sc, 3);
@@ -167,7 +186,7 @@ export function createBuilder(scene, world) {
         sp = (o.speed ?? 0.11) + i * 0.01;
       L.animated.push({
         mesh: m,
-        update: (t) => {
+        update: (t: number) => {
           const a = t * sp + ph;
           m.position.set(Math.cos(a) * r, h + Math.sin(a * 2.3) * 3, Math.sin(a) * r * 0.7);
           m.lookAt(
@@ -202,3 +221,6 @@ export function createBuilder(scene, world) {
     world,
   };
 }
+
+export type MapKit = ReturnType<typeof createBuilder>;
+export type MapBuilder = (kit: MapKit, arena?: boolean) => Level;

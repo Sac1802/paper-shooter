@@ -1,3 +1,5 @@
+import type { MapBuilder } from './builder.js';
+import type { Level } from './map-contracts.js';
 import type { Scene } from 'three';
 import type { World } from '../engine/physics.js';
 import type { MapKey } from '../domain/maps.js';
@@ -7,9 +9,8 @@ import { buildDistrict } from './district.js';
 import { buildMexico } from './mexico.js';
 export { LEVELS } from '../domain/maps.js';
 
-export type MapKit = ReturnType<typeof createBuilder>;
-export type Level = Omit<MapKit['L'], 'key'> & { key: MapKey };
-export type MapBuilder = (kit: MapKit, arena?: boolean) => MapKit['L'];
+export type { MapKit, MapBuilder } from './builder.js';
+export type { Level } from './map-contracts.js';
 
 // Adding a map key requires a builder here; each map uses the same construction contract.
 const builders: Record<MapKey, MapBuilder> = { district: buildDistrict, mexico: buildMexico };

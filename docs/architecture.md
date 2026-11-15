@@ -176,7 +176,9 @@ until the user's explicit confirmation.
 ## Adding a map
 
 1. Add its key/name/blurb to `src/domain/maps.ts`. Lookup and menu metadata follow the registry.
-2. Implement a builder in `src/maps` using `MapKit`, then register it in `src/maps/index.ts`.
+2. Implement a builder in `src/maps` using `MapKit` / `MapBuilder` from `src/maps/builder.ts`,
+   then register it in `src/maps/index.ts`. Import authoring types from the builder rather than the
+   registry to avoid a registration dependency cycle.
    The typed registry requires a builder for every map key.
 3. Return the level contract: bounds, player start, enemy/sniper/pickup positions, arena spawns,
    breakables, animated objects and owned meshes. Call the kit's `finish()` to merge geometry and
