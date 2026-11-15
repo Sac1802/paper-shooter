@@ -77,7 +77,7 @@ export function createCombat(runtime, actions = {}) {
           const d2 = _v.lengthSq() - tca * tca;
           if (d2 <= r * r) {
             const tt = tca - Math.sqrt(r * r - d2);
-            if (tt >= 0 && (!best || best.player !== t || tt < best.dist))
+            if (tt >= 0 && (!best || tt < best.dist))
               best = {
                 player: t,
                 part: 'blade',
