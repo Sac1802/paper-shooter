@@ -17,17 +17,17 @@ Branch coverage is reported separately and still has room to improve in combat, 
 failure paths. Do not describe line coverage as branch coverage or lower Sonar's gate to hide a
 missing report. Sonar's own new-code/condition calculations can differ from the local total.
 
-Local whole-product measurement at `1853e42` on 2026-11-14 with the scoped integration deadline
+Local whole-product measurement at `83cd381` on 2026-11-15 with the scoped integration deadline
 below (later CI/generated reports supersede these snapshot values):
 
-| Metric                      | Result                                          |
-| --------------------------- | ----------------------------------------------- |
-| Unit/integration tests      | 231 passing, including architecture regressions |
-| Statements                  | 90.12%                                          |
-| Lines                       | 91.52%                                          |
-| Functions                   | 89.96%                                          |
-| Branches                    | 80.81%                                          |
-| Production dependency audit | 0 known advisories at the time of inspection    |
+| Metric                      | Result                                                          |
+| --------------------------- | --------------------------------------------------------------- |
+| Unit/integration tests      | 321 passing across 64 files, including architecture regressions |
+| Statements                  | 91.77%                                                          |
+| Lines                       | 93.26%                                                          |
+| Functions                   | 91.08%                                                          |
+| Branches                    | 83.03%                                                          |
+| Production dependency audit | 0 known advisories at the time of inspection                    |
 
 The generated report and latest CI run are authoritative. Test seeds are fixed so procedural
 variation does not randomly change assertions/coverage. Dependency advisories are time-sensitive;
@@ -39,14 +39,17 @@ rerun `pnpm audit --prod` when updating dependencies or preparing a release.
   Expected collider counts remain 517, 429, 321 and 321 respectively.
 - A recorded movement trace covering walking, sprint, jump, double jump, dash and crouch, plus
   collision resolution, raycasts, step-up and navigation around obstacles.
-- Waves, bosses, checkpoints, rewards, death/respawn, FFA scores and host migration.
+- Waves, bosses, checkpoints, rewards, death/respawn, FFA scores and two-/three-client host recovery,
+  including score transfer, bounded retries, stale completion/progress and cancelled session timers.
 - Real application controllers with replaceable renderer/transport boundaries: map switches,
   pickups, destructibles, damage, network snapshots, lobby browsing and match results.
 - Pre-extraction weapon geometry/action-cycle, camera, grenade and grapple traces; ammunition
   conservation, reload interruption, melee windows and remote model state.
 - Ten pre-extraction enemy archetype traces: geometry, AI/animation/projectiles, random draw order
   and death/resource retirement; isolated target queries, route/formation steering, projectile
-  authority/deflection, sniper/burst cycles and presentation lifetime checks.
+  authority/deflection, sniper/burst cycles and presentation lifetime checks. A historical client
+  replica trace also preserves tuple projection/interpolation and mirrored retirement. Actor/system
+  composition, host/client frames, population, damage and ordered death now have checked owners.
 - Recorded complete procedural-audio schedules and composed particle/decal/fragment output,
   including shared resource retirement and automatic-reload cancellation.
 - Keyboard/mouse/gamepad input, audio envelopes/theme scheduling, resource/listener/context cleanup.
@@ -60,10 +63,11 @@ real pass/uniform/envelope/controller behavior. They do not prove shader appeara
 GPU performance or NAT traversal. Chromium smoke tests run against `dist/` and exercise the actual
 browser renderer/menu/game code. Browser tests are not silently added to the unit coverage total.
 
-The composed map/snapshot/damage multiplayer scenario has a local 10-second test deadline because
-it builds two complete applications and repeatedly rebuilds their real maps. Instrumented CI
-execution exceeded Vitest's default 5 seconds. Its fake clock/message flushing remains bounded;
-other tests retain their default deadline. This is a test execution budget, not a coverage change
+The composed map/snapshot/damage multiplayer scenario and three-client host recovery have local
+10-second test deadlines: they build two/three complete applications, with repeated real map
+rebuilds in the first case. Instrumented CI execution of the first scenario exceeded Vitest's
+default 5 seconds. Fake clocks/message flushing remain bounded; other tests retain their default
+deadline. This is a test execution budget, not a coverage change
 or a claim about real-browser frame performance.
 
 ## Transform baseline precision
@@ -105,7 +109,7 @@ signing secret and expiring credentials; it is not used to store passwords. Keep
 attribution and the scoped license notice intact.
 
 The subsequent [manual refactor review](reviews/2026-11-14-refactor.md) identifies remaining
-ownership/controller and enemy decomposition work, alongside resolved payload/resource findings.
+remaining controller/composition and presentation work, alongside the implemented enemy owners and resolved payload/resource findings.
 These green checks do not prove the complete architectural review finished. `pnpm review:structure` publishes advisory size/complexity findings alongside
 coverage; see the [engineering standard](engineering-standard.md) for its policy and limits.
 

@@ -45,6 +45,10 @@ gate does not close those findings or complete the remaining gameplay/controller
 - Made audio an application-owned resource and added cleanup for listeners, schedulers and GPU contexts.
 - Added provider-independent ICE, coturn credentials, trusted proxy configuration and bounded API limiting.
 - Protected host-only messages, sender identity, stale connection closes and cancelled lobby setup.
+- Introduced checked enemy composition, per-archetype behaviors, host/client frames and death owners,
+  retaining historical geometry, random draws and simulation/replica fingerprints.
+- Introduced checked run/session transitions, input binding, lobby connection and host recovery;
+  cancelled stale results/retries/prompts and verified score transfer through three-client recovery.
 - Corrected untrusted kill-feed/scoreboard HTML and an inherited blob-boss katana death crash.
 - Added static, Node/Compose and Vercel deployment paths; retained the existing loopback VPS port.
 - Added deterministic unit/integration tests, Chromium smoke tests, coverage imports and pinned CI actions.

@@ -40,8 +40,11 @@ flowchart TD
 `pnpm architecture` checks allowed imports, missing relative modules and import cycles across
 browser, server and API modules, including literal dynamic imports and re-exports. It is part of
 hooks and CI. It does not detect semantic cycles through runtime callbacks or shared mutable state.
-Runtime callbacks between controllers are supplied explicitly by composition;
-controllers do not import each other. `ApplicationOptions` defines replaceable rendering, input,
+Composition supplies commands between independent owners and adapters. SessionController owns
+run/match/menu transitions; browser controls and screens request those commands. LobbyConnection
+and HostMigration coordinate async connection/recovery through scoped transport/session ports.
+Some legacy controllers still receive runtime/action bags; an import check does not validate those
+semantic boundaries. `ApplicationOptions` defines replaceable rendering, input,
 storage, audio and network adapters for embedding and integration tests.
 
 ## State and lifetime
@@ -58,6 +61,19 @@ retires their current subtree. Reparenting an existing tracked fragment transfer
 counting it twice. Shared geometry/materials survive until their last tracked mesh or explicit cache
 lease releases them. Renderer render targets and audio contexts retain their separate adapter
 lifetimes. See [ADR 0008](adr/0008-scene-resource-ownership.md).
+
+EnemyManager composes a population registry, queries, actor components, host simulation, client
+playback, replication and ordered damage/death policy through checked capabilities. Actors own
+navigation, perception and archetype behavior; presentation owners consume model/pose/feedback
+ports. Player abilities, weapon mechanics and their views also have independent checked owners,
+while their legacy actor/weapon composition still requires typing. See
+[ADR 0010](adr/0010-player-state-ownership.md), [ADR 0011](adr/0011-weapon-mechanics-and-presentation.md)
+and [ADR 0012](adr/0012-enemy-boundaries.md).
+
+SessionController owns its delayed input prompt. SessionTasks cancels stale connection results,
+progress, errors and retry backoffs on replacement/leave/disposal. Host recovery retains score,
+roster and clock authority through explicit commands. Screens no longer reset gameplay or own
+menu/lobby-return transitions. See [ADR 0013](adr/0013-session-transition-ownership.md).
 
 The loop keeps the original variable timestep, capped at 50 ms, hitstop and focus scaling. Input,
 simulation, death/respawn, idle/lobby updates and presentation have separate phases. Moving to a
@@ -80,22 +96,24 @@ separate decision and regression baseline.
   model hierarchy remains where it already models shared behavior; an ECS is not introduced.
 
 TypeScript strict mode covers domain rules, shared contracts, physics/math, registry, network
-configuration and backend. Existing procedural graphics, gameplay and controllers remain JavaScript
-under `allowJs` with `checkJs: false`; those modules are **not** fully statically checked. Tests and
+configuration/discovery, backend, model recipes, player/weapon components, enemy composition,
+session transitions and lobby connection/recovery. Legacy procedural maps/effects, player/weapon
+facades, transport, runtime composition and several application/presentation adapters remain
+JavaScript under `allowJs` with `checkJs: false`; those boundaries are **not** fully statically checked. Tests and
 coverage include them. This is an explicit incremental typing decision, not a completed conversion
 of every source file. See [ADR 0003](adr/0003-modular-architecture.md).
 
 ## Remaining decomposition
 
-The player and enemy modules still contain large stateful implementations. Player update phases
-are named, but movement abilities, equipment and damage state still share one class. Enemy geometry,
-data and projectiles are separate, while archetype behavior, animation and damage processing remain
-in the manager module. These are candidates for extraction behind the existing gameplay contracts
-and regression tests. File length is a review signal; splitting by an arbitrary line limit does not
-replace cohesive responsibilities or explicit state ownership. A passed coverage/quality gate is
-not proof that this remaining architecture work is finished. The
-[manual review](reviews/2026-11-14-refactor.md) inventories additional coupling below and above the
-[engineering standard's](engineering-standard.md) size thresholds.
+Player/weapon facades still bind legacy context, and runtime composition, screen read models,
+settings, multiplayer message/idle/synchronization policy and match progression still need narrower
+checked boundaries. The enemy subsystem now has checked composition and separate behavior,
+simulation, replication and presentation owners. Extracted effects remain JavaScript, and some
+map/engine/input content still needs complexity review. File length is a review signal; splitting
+at an arbitrary limit does not establish ownership. A passed coverage/quality gate does not close
+the [manual review](reviews/2026-11-14-refactor.md) or the remaining work under the
+[engineering standard](engineering-standard.md). The independent final review remains deferred
+until the user's explicit confirmation.
 
 ## Adding a map
 
@@ -110,6 +128,6 @@ not proof that this remaining architecture work is finished. The
 
 The kit exposes boxes, walls with gaps, stairs, rails, cylinders, spheres, grapple rings, spawn
 markers and moving paper planes. Reusable character/weapon geometry lives in
-`src/presentation/models/characters.js`, independently of enemy AI. District and Mexico retain their
+`src/presentation/models/characters.ts`, independently of enemy AI. District and Mexico retain their
 existing geometry, colliders and spawn positions. Dynamic map generation is a future consumer of
 this contract; it is not implemented by this refactor.
