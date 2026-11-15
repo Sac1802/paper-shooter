@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import { LobbyConnection } from './lobby-connection.js';
 import { connectionError } from '../presentation/network-errors.js';
 import { INK } from '../shared/ink.js';
-import { RemotePlayer, encodeLocal } from '../gameplay/remote-player.js';
+import { RemotePlayer } from '../gameplay/remote-player.js';
 import { knownMap } from '../domain/maps';
-import { formatClock as mmss } from '../domain/match';
+import { IdlePlayers } from './idle-players.js';
+import { MatchClock } from './match-clock.js';
+import { NetworkSync } from './network-sync.js';
 
 export function createMultiplayer(runtime, actions = {}) {
   const audio = runtime.audio;
@@ -297,142 +299,63 @@ export function createMultiplayer(runtime, actions = {}) {
       }
     } else net.send('fell', {});
   };
-  net.onHost('clock', (d) => {
-    if (!net.isHost) {
-      runtime.state.matchLeft = d.left;
-      runtime.state.clockRunning = !!d.on;
-    }
+  const clock = new MatchClock({
+    state: runtime.state,
+    game,
+    transport: net,
+    inMatch,
+    opponentCount: () => remote.size,
+    localName: () => runtime.state.myName,
+    sortedScores,
+    timer: (text) => hud.setTimer(text),
+    end: endMatch,
   });
-
-  // ---- idle players: a warning, then out; a lobby with nobody active in it shuts down ----
-  const IDLE_FLAG = 30,
-    IDLE_MATCH = 150,
-    IDLE_LOBBY = 300,
-    IDLE_WARN = 20;
-  let idleWarned = false,
-    idleCheckT = 0;
-  function idleUpdate(dt) {
-    if (!net.active) {
-      idleWarned = false;
-      return;
-    }
-    idleCheckT -= dt;
-    if (idleCheckT > 0) return;
-    idleCheckT = 1;
-    const limit = inMatch() ? IDLE_MATCH : IDLE_LOBBY;
-    const idle = input.idleSeconds;
-    const othersActive = [...remote.values()].some((r) => !r.idle);
-    // a host that still has active players stays; kicking it would end their match
-    const canDrop = !net.isHost || !othersActive;
-    if (idle > limit - IDLE_WARN && !idleWarned && canDrop) {
-      idleWarned = true;
+  const idle = new IdlePlayers({
+    transport: net,
+    opponents: () => remote.entries(),
+    inMatch,
+    idleSeconds: () => input.idleSeconds,
+    now: () => performance.now(),
+    warn: () => {
       hud.message('STILL THERE?', 'move or you get kicked for inactivity', 3);
       audio.empty();
-    }
-    if (idle <= limit - IDLE_WARN) idleWarned = false;
-    if (idle > limit && canDrop) {
-      const back = net.isHost ? null : String(net.aliasCode || net.code || '').replace(/-\d+$/, '');
-      leaveOnline(net.isHost ? 'lobby closed: everyone was idle' : 'kicked for inactivity');
-      lobby.rejoinCode = back;
-      if (back) connectionPresentation.start();
-      return;
-    }
-    // the host also clears out a client that has sat idle past the limit, in case its tab cannot do it itself
-    if (net.isHost)
-      for (const [id, r] of remote)
-        if (
-          r.idle &&
-          r.idleSince &&
-          performance.now() / 1000 - r.idleSince > limit - IDLE_FLAG + 15
-        ) {
-          net.sendTo(id, 'kick', { reason: 'kicked for inactivity' });
-          const c = net.conns.get(id);
-          setTimeout(() => {
-            try {
-              c?.close();
-            } catch (e) {
-              /* ignore */
-            }
-          }, 500);
+    },
+    leave: leaveOnline,
+    rejoin: (code) => {
+      lobby.rejoinCode = code;
+      if (code) connectionPresentation.start();
+    },
+    kick: (id) => {
+      net.sendTo(id, 'kick', { reason: 'kicked for inactivity' });
+      const connection = net.conns.get(id);
+      setTimeout(() => {
+        try {
+          connection?.close();
+        } catch {
+          /* The channel may already be closed. */
         }
-  }
-  net.onHost('kick', (d) => {
-    const back = String(net.aliasCode || net.code || '').replace(/-\d+$/, '');
-    leaveOnline((d && d.reason) || 'kicked');
-    lobby.rejoinCode = back;
-    if (back) connectionPresentation.start();
+      }, 500);
+    },
   });
-  let syncTick = 0;
-  function netUpdate(dt) {
-    idleUpdate(dt);
-    if (!net.active) return;
-    const now = performance.now() / 1000;
-    syncTick++;
-    for (const r of remote.values()) r.update(dt, now);
-    // a connection that died without saying so leaves a figure standing around: drop anyone silent too long
-    if (inMatch() && !connection.migrating)
-      for (const [id, r] of remote) {
-        if (r.lastSeen && performance.now() - r.lastSeen > 9000) {
-          if (!net.isHost && id === net.hostId) {
-            net.leave();
-            void migrateHost();
-            break;
-          }
-          const nm = r.name;
-          removeRemote(id);
-          hud.kill(nm + ' lost connection', 0);
-          if (net.isHost) {
-            const c = net.conns.get(id);
-            if (c) {
-              try {
-                c.close();
-              } catch (e) {
-                /* ignore */
-              }
-              net.conns.delete(id);
-            }
-            net.send('leave', { id });
-            broadcastLobby();
-            sendScores();
-          }
-        }
-      }
-    if (syncTick % 3 === 0 && inMatch())
-      net.send(
-        'ps',
-        encodeLocal(player, player.weaponIndex, {
-          firing: player.firing,
-          idle: input.idleSeconds > IDLE_FLAG,
-        }),
-        true,
-      );
-    if (shotQueue.length) net.broadcast('shots', { k: player.weapon.kind, e: shotQueue.splice(0) });
-    if (net.isHost && inMatch() && remote.size > 0) game.clockStarted = true;
-    const clockOn =
-      inMatch() && !game.over && (net.isHost ? !!game.clockStarted : runtime.state.clockRunning);
-    if (inMatch() && !game.over) {
-      if (clockOn) runtime.state.matchLeft = Math.max(0, runtime.state.matchLeft - dt);
-      if (net.isHost) {
-        runtime.state.clockT -= dt;
-        if (runtime.state.clockT <= 0) {
-          runtime.state.clockT = 2;
-          net.send('clock', { left: Math.round(runtime.state.matchLeft), on: clockOn });
-        }
-      }
-      hud.setTimer(clockOn ? mmss(runtime.state.matchLeft) : 'clock starts when someone joins');
-    }
-    if (net.isHost && clockOn) {
-      game.matchT += dt;
-      if (runtime.state.matchLeft <= 0) {
-        const rows = sortedScores();
-        const w = rows.length
-          ? { id: rows[0][0], name: rows[0][1].name }
-          : { id: net.id, name: runtime.state.myName };
-        net.send('end', w);
-        endMatch(w);
-      }
-    }
-  }
+  const sync = new NetworkSync({
+    transport: net,
+    player,
+    opponents: () => remote.entries(),
+    shotQueue,
+    inMatch,
+    migrating: () => connection.migrating,
+    idleSeconds: () => input.idleSeconds,
+    now: () => performance.now(),
+    idle: (dt) => idle.update(dt),
+    clock: (dt) => clock.update(dt),
+    remove: removeRemote,
+    migrate: migrateHost,
+    feed: (text) => hud.kill(text, 0),
+    broadcastLobby,
+    sendScores,
+  });
+  net.onHost('clock', (data) => clock.receive(data));
+  net.onHost('kick', (data) => idle.kicked(data.reason));
   function dispose() {
     net.onPeerJoin = null;
     net.onPeerLeave = null;
@@ -448,8 +371,8 @@ export function createMultiplayer(runtime, actions = {}) {
     lobbyRows,
     broadcastLobby,
     migrateHost,
-    idleUpdate,
-    netUpdate,
+    idleUpdate: (dt) => idle.update(dt),
+    netUpdate: (dt) => sync.update(dt),
     leaveOnline,
     createLobby: (isPublic) => connection.createLobby(isPublic),
     joinLobby: (code) => connection.joinLobby(code),
