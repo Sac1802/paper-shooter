@@ -287,6 +287,7 @@ export function createApplication(options) {
     if (disposed) return;
     disposed = true;
     loop.stop();
+    screens.dispose();
     controls.dispose();
     session.dispose();
     multiplayer.dispose();

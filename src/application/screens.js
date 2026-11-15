@@ -90,7 +90,8 @@ export function createScreens(runtime, actions = {}) {
     </div>`;
   }
   let lobbyList = null,
-    listBusy = false;
+    listBusy = false,
+    disposed = false;
   function lobbyListHTML() {
     if (listBusy) return '<div class="hint">looking…</div>';
     if (!lobbyList) return '<div class="hint">press refresh to look for open lobbies</div>';
@@ -103,14 +104,17 @@ export function createScreens(runtime, actions = {}) {
       .join('');
   }
   async function refreshLobbies() {
-    if (listBusy || net.active) return;
+    if (disposed || listBusy || net.active) return;
     listBusy = true;
     const box = hud.el.panel.querySelector('#lobbyRows');
     if (box) box.innerHTML = lobbyListHTML();
     let err = null;
     try {
-      lobbyList = await net.listLobbies({ name: runtime.state.myName });
+      const found = await net.listLobbies({ name: runtime.state.myName });
+      if (disposed) return;
+      lobbyList = found;
     } catch (e) {
+      if (disposed) return;
       lobbyList = [];
       err = e;
     }
@@ -296,6 +300,9 @@ export function createScreens(runtime, actions = {}) {
   }
 
   return {
+    dispose: () => {
+      disposed = true;
+    },
     settingsHTML,
     wireSettings,
     wireName,
