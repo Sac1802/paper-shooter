@@ -130,4 +130,35 @@ describe('complete multiplayer sessions through an in-memory signaling boundary'
     expect(guest.net.aliasCode).toBe(code);
     expect(guest.game.state).toBe('play');
   });
+  it(
+    'rejoins a third player to the elected successor without losing scores',
+    { timeout: 10_000 },
+    async () => {
+      vi.useFakeTimers();
+      const make = clients();
+      const host = make(),
+        successor = make(),
+        follower = make();
+      await host.app.multiplayer.createLobby(true);
+      const code = host.net.code;
+      await successor.app.multiplayer.joinLobby(code);
+      await follower.app.multiplayer.joinLobby(code);
+      await flushMessages();
+      host.scores.set(follower.net.id, { name: 'player', kills: 3, deaths: 1 });
+      host.app.match.sendScores();
+      await flushMessages();
+      const previousFollower = follower.net.id;
+      host.net.leave();
+      await flushMessages();
+      await vi.advanceTimersByTimeAsync(1800);
+      await flushMessages();
+      expect(successor.net.isHost).toBe(true);
+      expect(follower.net.active).toBe(true);
+      expect(follower.net.authorityId).toBe(successor.net.id);
+      expect(follower.net.code).toBe(`${code}-1`);
+      expect(follower.game.state).toBe('lobby');
+      expect(successor.lobby.players.has(previousFollower)).toBe(false);
+      expect(successor.scores.get(follower.net.id)).toMatchObject({ kills: 3, deaths: 1 });
+    },
+  );
 });

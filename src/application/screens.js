@@ -238,6 +238,10 @@ export function createScreens(runtime, actions = {}) {
   function lockButtons(box) {
     for (const b of box.querySelectorAll('button')) if (b.id !== 'backBtn') b.disabled = true;
   }
+  function showConnectionStatus(message) {
+    const status = hud.el.panel.querySelector('#status');
+    if (status) status.textContent = message;
+  }
   function unlockButtons() {
     const box = hud.el.panel.querySelector('#online');
     if (box) for (const b of box.querySelectorAll('button')) b.disabled = false;
@@ -342,6 +346,7 @@ export function createScreens(runtime, actions = {}) {
     refreshLobbies,
     wireOnline,
     lockButtons,
+    showConnectionStatus,
     unlockButtons,
     renderLobby,
     showStart,

@@ -217,6 +217,26 @@ export class SessionController {
     screen.screen = 'lobby';
     presentation.start();
   }
+  enterLobby() {
+    this.ports.game.state = 'lobby';
+    this.ports.screen.screen = 'lobby';
+    this.ports.presentation.start();
+  }
+  takeClockAuthority() {
+    const { game, screen } = this.ports;
+    game.clockStarted = screen.clockRunning || screen.matchLeft < FFA_TIME;
+  }
+  recoverHost(wasInMatch: boolean) {
+    const { game, refreshScores } = this.ports;
+    if (game.state === 'over') return;
+    if (wasInMatch) {
+      if (game.state !== 'play' && game.state !== 'dying') game.state = 'play';
+      refreshScores();
+    } else this.enterLobby();
+  }
+  recoverFollower(wasInMatch: boolean) {
+    if (!wasInMatch) this.enterLobby();
+  }
   /** Transport and roster are already cleared by the connection owner. */
   returnOnline() {
     this.cancelPrompt();

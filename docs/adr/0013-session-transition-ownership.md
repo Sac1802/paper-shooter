@@ -31,6 +31,13 @@ also outlived leaving/disposal, and the match pointer-lock prompt had no owner t
   invalidates previous completions/progress/errors and settles cancelled backoff waits immediately.
   A finished migration retains its generation for later alias reclamation until cancellation.
   Network transport cancellation remains a separate lower-layer responsibility.
+- LobbyConnection owns connect/create/quick-play/leave transactions, roster/score teardown and
+  progress/error publication. HostMigration owns successor election, generation codes, bounded
+  host/follower retries and alias recovery through a smaller capability contract. They request
+  phase transitions from SessionController; neither receives the runtime, game record or DOM.
+  The session owner adopts clock authority before alias setup and presents recovery afterward,
+  preserving the original ordering, including failure during alias setup. Plain-text connection
+  feedback belongs to a separate presentation function.
 
 ## Alternatives and consequences
 
@@ -40,9 +47,9 @@ not decide who owns network retries, map reset or input lifetimes. Separate chec
 that sequencing reviewable while retaining the existing variable-step gameplay.
 
 This is incremental. Runtime composition, screens, multiplayer message dispatch, match progression
-and player/weapon adapters still have JavaScript boundaries. Lobby connect/migrate currently uses
-SessionTasks inside the legacy multiplayer controller; its contracts and remaining session phase
-writes still require extraction. This ADR does not close all of R2 or R5.
+and player/weapon adapters still have JavaScript boundaries. Multiplayer still binds gameplay
+messages, idle policy and synchronization through runtime access. Screens still combine read models,
+settings and DOM wiring. This ADR does not close all of R2 or R5.
 
 ## Evidence
 
@@ -50,5 +57,7 @@ Composed regressions preserve solo start/pause/resume/death, FFA start/late join
 map replacement and host migration. Existing movement, camera, weapon and ten-enemy host/client
 fingerprints remain unchanged. Reproduced cancellation regressions cover stale success/error,
 replacement progress, Back navigation, migration backoff and disposal. Additional cases cover
-prompt retirement and a new solo run started before an old match prompt fires. These deterministic
+prompt retirement and a new solo run started before an old match prompt fires. A three-client
+session verifies a follower reconnecting to the elected successor with its previous score. Isolated
+recovery tests bound successor/follower failure retries and preserve clock/alias/presentation order. These deterministic
 checks do not establish real-network latency, NAT reachability or GPU/device performance.

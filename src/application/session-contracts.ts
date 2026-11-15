@@ -24,6 +24,7 @@ export interface SessionScreen {
   musicWanted: boolean;
   matchLeft: number;
   clockT: number;
+  clockRunning: boolean;
 }
 export interface SessionInput {
   readonly usingGamepad: boolean;

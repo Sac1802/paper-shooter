@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { SessionTasks } from './session-tasks.js';
+import { LobbyConnection } from './lobby-connection.js';
+import { connectionError } from '../presentation/network-errors.js';
 import { INK } from '../shared/ink.js';
 import { RemotePlayer, encodeLocal } from '../gameplay/remote-player.js';
 import { knownMap } from '../domain/maps';
-import { FFA_TIME, formatClock as mmss } from '../domain/match';
+import { formatClock as mmss } from '../domain/match';
 
 export function createMultiplayer(runtime, actions = {}) {
-  const tasks = new SessionTasks();
   const audio = runtime.audio;
   const {
     remote,
@@ -27,7 +27,6 @@ export function createMultiplayer(runtime, actions = {}) {
     renderLobby,
     sendScores,
     refreshScoreHud,
-    showStart,
     farthestSpawnIndex,
     startMatch,
     breakProp,
@@ -39,9 +38,23 @@ export function createMultiplayer(runtime, actions = {}) {
     tallyDeath,
     applyScores,
     sortedScores,
-    returnOnline,
-    unlockButtons,
+    session,
+    connectionPresentation,
   } = actions;
+  const connection = new LobbyConnection({
+    transport: net,
+    lobby,
+    scores,
+    local: runtime.state,
+    removeRemote: (id) => removeRemote(id),
+    remoteIds: () => remote.keys(),
+    inMatch,
+    broadcastLobby: () => broadcastLobby(),
+    session,
+    presentation: connectionPresentation,
+  });
+  const leaveOnline = (reason) => connection.leaveOnline(reason);
+  const migrateHost = () => connection.migrateHost();
   // ---------------- networking ----------------
   const TRACER_THICK = { rifle: 0.02, shotgun: 0.014, sniper: 0.03 };
   const _sm = new THREE.Vector3(),
@@ -103,114 +116,6 @@ export function createMultiplayer(runtime, actions = {}) {
     if (lobby.order && lobby.order.some((id) => id !== lobby.hostId)) void migrateHost();
     else leaveOnline('the host left the lobby');
   };
-  // ---- host transfer: when the host goes, the earliest-joined player left takes over on a generation
-  // code (the old code is slow to free up on the signalling server); everyone else rejoins there
-  async function migrateHost() {
-    if (tasks.migrating) return;
-    const task = tasks.begin('migrate');
-    if (!task) return;
-    try {
-      await _migrateHost(task);
-    } catch {
-      if (task.current) leaveOnline('could not recover the lobby after the host left');
-    } finally {
-      tasks.finish(task);
-    }
-  }
-  async function _migrateHost(task) {
-    const oldHost = lobby.hostId,
-      myId = net.id;
-    const gen = (lobby.gen || 0) + 1;
-    lobby.gen = gen;
-    const base = (lobby.code || net.code || '').replace(/-\d+$/, '');
-    const code = base + '-' + gen;
-    const roster = (lobby.order || []).filter((id) => id !== oldHost && lobby.players.has(id));
-    if (!roster.length || !base) {
-      leaveOnline('the host left the lobby');
-      return;
-    }
-    const successor = roster[0];
-    const wasInMatch = inMatch();
-    if (oldHost) {
-      const r = remote.get(oldHost);
-      if (r) r.dispose();
-      remote.delete(oldHost);
-      lobby.players.delete(oldHost);
-      scores.delete(oldHost);
-    }
-    hud.message(
-      'HOST LEFT',
-      successor === myId ? 'you are hosting now' : 'moving to the new host…',
-      2.6,
-    );
-    if (successor === myId) {
-      let ok = false;
-      for (let tries = 0; tries < 2 && !ok; tries++) {
-        try {
-          await net.host({ isPublic: lobby.isPublic, code });
-          if (!task.current) return;
-          ok = true;
-        } catch (e) {
-          if (!(await task.wait(800))) return;
-        }
-      }
-      if (!ok) {
-        leaveOnline('could not take over the lobby');
-        return;
-      }
-      const mine = lobby.players.get(myId) || { name: runtime.state.myName };
-      lobby.players.delete(myId);
-      lobby.players.set(net.id, mine);
-      const ms = scores.get(myId);
-      scores.delete(myId);
-      if (ms) scores.set(net.id, ms);
-      lobby.hostId = net.id;
-      lobby.code = code;
-      lobby.order = [net.id, ...roster.filter((id) => id !== myId)];
-      net.accepting = true;
-      game.clockStarted = runtime.state.clockRunning || runtime.state.matchLeft < FFA_TIME;
-      net.onAlias = () => {
-        if (!task.current) return;
-        broadcastLobby();
-        hud.kill('lobby code ' + base + ' is back', 0);
-      };
-      net.claimAlias(base);
-      if (game.state === 'over') {
-        /* the results stay up; the host timer now runs here */
-      } else if (wasInMatch) {
-        if (game.state !== 'play' && game.state !== 'dying') game.state = 'play';
-        refreshScoreHud();
-      } else {
-        game.state = 'lobby';
-        runtime.state.screen = 'lobby';
-        showStart();
-      }
-      broadcastLobby();
-    } else {
-      if (!(await task.wait(1200))) return;
-      const deadline = performance.now() + 20000;
-      let joined = false;
-      while (!joined && performance.now() < deadline) {
-        try {
-          await net.join(code, { name: runtime.state.myName, prev: myId });
-          if (!task.current) return;
-          joined = true;
-        } catch (e) {
-          if (!(await task.wait(1200))) return;
-        }
-      }
-      if (!joined) {
-        leaveOnline('lost the match when the host left');
-        return;
-      }
-      lobby.code = code;
-      if (!wasInMatch) {
-        game.state = 'lobby';
-        runtime.state.screen = 'lobby';
-        showStart();
-      }
-    }
-  }
   net.on('refused', (d) => leaveOnline(d.reason));
   net.hostName = runtime.state.myName;
   net.onPeerJoin = (from, meta) => {
@@ -429,7 +334,7 @@ export function createMultiplayer(runtime, actions = {}) {
       const back = net.isHost ? null : String(net.aliasCode || net.code || '').replace(/-\d+$/, '');
       leaveOnline(net.isHost ? 'lobby closed: everyone was idle' : 'kicked for inactivity');
       lobby.rejoinCode = back;
-      if (back) showStart();
+      if (back) connectionPresentation.start();
       return;
     }
     // the host also clears out a client that has sat idle past the limit, in case its tab cannot do it itself
@@ -455,7 +360,7 @@ export function createMultiplayer(runtime, actions = {}) {
     const back = String(net.aliasCode || net.code || '').replace(/-\d+$/, '');
     leaveOnline((d && d.reason) || 'kicked');
     lobby.rejoinCode = back;
-    if (back) showStart();
+    if (back) connectionPresentation.start();
   });
   let syncTick = 0;
   function netUpdate(dt) {
@@ -465,7 +370,7 @@ export function createMultiplayer(runtime, actions = {}) {
     syncTick++;
     for (const r of remote.values()) r.update(dt, now);
     // a connection that died without saying so leaves a figure standing around: drop anyone silent too long
-    if (inMatch() && !tasks.migrating)
+    if (inMatch() && !connection.migrating)
       for (const [id, r] of remote) {
         if (r.lastSeen && performance.now() - r.lastSeen > 9000) {
           if (!net.isHost && id === net.hostId) {
@@ -528,117 +433,15 @@ export function createMultiplayer(runtime, actions = {}) {
       }
     }
   }
-  function cancelPending() {
-    tasks.cancel();
-    net.leave();
-  }
   function dispose() {
-    tasks.dispose();
     net.onPeerJoin = null;
     net.onPeerLeave = null;
     net.onDisconnect = null;
-    net.onAlias = null;
-    net.leave();
-  }
-  function leaveOnline(reason) {
-    cancelPending();
-    for (const id of [...remote.keys()]) removeRemote(id);
-    lobby.players.clear();
-    scores.clear();
-    lobby.status = reason || '';
-    returnOnline();
-  }
-
-  async function createLobby(isPublic) {
-    const task = tasks.begin('connect');
-    if (!task) return;
-    setStatus('opening a lobby…');
-    try {
-      await net.host({ isPublic });
-      if (!task.current) return;
-    } catch (err) {
-      if (!task.current) return;
-      setStatus(friendlyError(err));
-      unlockButtons();
-      return;
-    }
-    lobby.isPublic = isPublic;
-    lobby.map = runtime.state.mapKey;
-    lobby.players.clear();
-    lobby.players.set(net.id, { name: runtime.state.myName });
-    lobby.hostId = net.id;
-    lobby.status = '';
-    game.state = 'lobby';
-    runtime.state.screen = 'lobby';
-    showStart();
-  }
-  async function joinLobby(code) {
-    const task = tasks.begin('connect');
-    if (!task) return;
-    setStatus('connecting…');
-    try {
-      await net.join(code, { name: runtime.state.myName });
-      if (!task.current) return;
-    } catch (err) {
-      if (!task.current) return;
-      setStatus(friendlyError(err));
-      unlockButtons();
-      return;
-    }
-    lobby.isPublic = net.isPublic;
-    lobby.status = '';
-    game.state = 'lobby';
-    runtime.state.screen = 'lobby';
-    showStart();
-  }
-  async function quickPlay() {
-    const task = tasks.begin('connect');
-    if (!task) return;
-    try {
-      await net.quickJoin({ name: runtime.state.myName }, (status) => {
-        if (task.current) setStatus(status);
-      });
-      if (!task.current) return;
-      lobby.isPublic = true;
-      lobby.status = '';
-      game.state = 'lobby';
-      runtime.state.screen = 'lobby';
-      showStart();
-      return;
-    } catch (err) {
-      if (!task.current) return;
-      if (!/no open public/.test(String(err.message))) {
-        setStatus(friendlyError(err));
-        unlockButtons();
-        return;
-      }
-    }
-    setStatus('no open lobbies · opening a public one for you…');
-    await createLobby(true);
-  }
-  function friendlyError(err) {
-    const m = String((err && err.message) || err || '');
-    if (!m) return 'something went wrong';
-    if (/networking library/.test(m))
-      return 'could not load the networking library · check your connection and reload';
-    if (/timed out|signalling/.test(m))
-      return 'could not reach the matchmaking server · check your connection';
-    if (/no lobby with that code/.test(m))
-      return 'no lobby with that code · check it with your friend';
-    if (/no answer/.test(m))
-      return 'found the lobby but could not connect · one of you may be on a network that blocks it';
-    if (/full/.test(m)) return 'that lobby is full · try another code';
-    if (/leave the lobby/.test(m)) return 'leave your lobby first';
-    return m;
-  }
-  function setStatus(t) {
-    lobby.status = t;
-    const el = hud.el.panel.querySelector('#status');
-    if (el) el.textContent = t;
+    connection.dispose();
   }
 
   return {
-    cancelPending,
+    cancelPending: () => connection.cancelPending(),
     dispose,
     addRemote,
     removeRemote,
@@ -648,10 +451,10 @@ export function createMultiplayer(runtime, actions = {}) {
     idleUpdate,
     netUpdate,
     leaveOnline,
-    createLobby,
-    joinLobby,
-    quickPlay,
-    friendlyError,
-    setStatus,
+    createLobby: (isPublic) => connection.createLobby(isPublic),
+    joinLobby: (code) => connection.joinLobby(code),
+    quickPlay: () => connection.quickPlay(),
+    friendlyError: connectionError,
+    setStatus: (message) => connection.setStatus(message),
   };
 }

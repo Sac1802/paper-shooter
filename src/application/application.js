@@ -106,7 +106,6 @@ export function createApplication(options) {
     renderLobby: (...args) => screens.renderLobby(...args),
     sendScores: (...args) => match.sendScores(...args),
     refreshScoreHud: (...args) => match.refreshScoreHud(...args),
-    showStart: (...args) => screens.showStart(...args),
     farthestSpawnIndex: (...args) => match.farthestSpawnIndex(...args),
     startMatch: (...args) => session.startMatch(...args),
     breakProp: (...args) => combat.breakProp(...args),
@@ -118,8 +117,20 @@ export function createApplication(options) {
     tallyDeath: (...args) => match.tallyDeath(...args),
     applyScores: (...args) => match.applyScores(...args),
     sortedScores: (...args) => match.sortedScores(...args),
-    returnOnline: () => session.returnOnline(),
-    unlockButtons: (...args) => screens.unlockButtons(...args),
+    session: {
+      enterLobby: () => session.enterLobby(),
+      returnOnline: () => session.returnOnline(),
+      takeClockAuthority: () => session.takeClockAuthority(),
+      recoverHost: (wasInMatch) => session.recoverHost(wasInMatch),
+      recoverFollower: (wasInMatch) => session.recoverFollower(wasInMatch),
+    },
+    connectionPresentation: {
+      start: () => screens.showStart(),
+      status: (message) => screens.showConnectionStatus(message),
+      unlockButtons: () => screens.unlockButtons(),
+      message: (...args) => runtime.hud.message(...args),
+      feed: (message) => runtime.hud.kill(message, 0),
+    },
   });
   const controls = createControls(
     {
