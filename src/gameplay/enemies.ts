@@ -1,8 +1,15 @@
-// Enemy population and frame/lifecycle coordination; actor composition has explicit checked capabilities.
+// Composition and public enemy-system API; frame and lifecycle policies have separate owners.
 import * as THREE from 'three';
 import { INK } from '../shared/ink.js';
 import { clamp } from '../engine/math.js';
 import { EnemyReplication } from './enemies/replication.js';
+import { EnemyPlayback } from './enemies/playback.js';
+import type { EnemySystemServices } from './enemies/system-contracts.js';
+import type { EnemyActorRef, EnemyActorServices, EnemyTarget } from './enemies/actor-contracts.js';
+import type { EnemyImpact } from '../domain/enemy-impact.js';
+import type { EnemyKind } from '../domain/enemies.js';
+import type { EnemySnapshot } from '../domain/enemy-snapshots.js';
+import type { MirroredEnemyDeath } from './enemies/lifecycle.js';
 import { EnemySimulation } from './enemies/simulation.js';
 import { EnemyAreaDamage } from './enemies/area-damage.js';
 import { EnemyLifecycle } from './enemies/lifecycle.js';
@@ -13,26 +20,42 @@ import { EnemyQueries } from './enemies/queries.js';
 import { BossFeedback } from '../presentation/characters/boss-feedback.js';
 import { ProjectileView } from '../presentation/projectiles.js';
 import { Projectiles } from './projectiles.js';
-const _v = new THREE.Vector3(),
-  _d = new THREE.Vector3();
 export { BOSSES } from '../domain/waves.js';
 export { TYPES, STATE_CODES, STATE_NAMES } from '../domain/enemies.js';
 export class EnemyManager {
-  constructor(ctx) {
-    this.ctx = ctx;
-    this.population = new EnemyPopulation();
+  private readonly population = new EnemyPopulation<EnemyActor>();
+  private readonly releaseEntity: (enemy: EnemyActor) => void;
+  private readonly queries: EnemyQueries<EnemyActor, EnemyTarget>;
+  private readonly areaDamage: EnemyAreaDamage<EnemyActor>;
+  private readonly lifecycle: EnemyLifecycle;
+  private readonly replication: EnemyReplication<EnemyActor>;
+  private readonly simulation: EnemySimulation<EnemyActor>;
+  private readonly playback: EnemyPlayback<EnemyActor>;
+  private readonly actorServices: EnemyActorServices;
+  readonly projectiles: Projectiles<EnemyActor>;
+  private readonly offset = new THREE.Vector3();
+  private readonly direction = new THREE.Vector3();
+  private slot = 0;
+  readonly mods = { speed: 1, damage: 1 };
+  // The host owns AI, physics and health; a mirror only presents replicas.
+  mirror = false;
+  onKill: ((enemy: EnemyActor, impact: EnemyImpact, severed: boolean) => void) | null = null;
+  onBoss: ((enemy: EnemyActor) => void) | null = null;
+  onClientHit: ((enemy: EnemyActor, amount: number, impact: EnemyImpact) => void) | null = null;
+  onSpawn: ((enemy: EnemyActor) => void) | null = null;
+  constructor(private readonly services: EnemySystemServices) {
     this.releaseEntity = (e) => {
       e.telegraph.dispose();
-      if (!e.rootDetached) ctx.resources.release(e.root);
+      if (!e.rootDetached) services.resources.release(e.root);
     };
     this.queries = new EnemyQueries(
       () => this.enemies,
       () => this.targets(),
-      ctx.world,
+      services.world,
     );
-    this.bossFeedback = new BossFeedback(ctx.effects, ctx.audio);
-    const deathFeedback = new EnemyDeathFeedback(ctx.scene, ctx.effects, ctx.audio);
-    this.area = new EnemyAreaDamage(
+    const bossFeedback = new BossFeedback(services.effects, services.audio);
+    const deathFeedback = new EnemyDeathFeedback(services.scene, services.effects, services.audio);
+    this.areaDamage = new EnemyAreaDamage(
       () => this.enemies,
       () => this.targets(),
       {
@@ -41,9 +64,9 @@ export class EnemyManager {
         feedback: deathFeedback,
       },
     );
-    this.lifecycle = new EnemyLifecycle(this.population, this.area, deathFeedback, {
-      resources: ctx.resources,
-      score: (points, label) => ctx.game.addScore(points, label),
+    this.lifecycle = new EnemyLifecycle(this.population, this.areaDamage, deathFeedback, {
+      resources: services.resources,
+      score: (points, label) => services.score(points, label),
       killed: (enemy, impact, sever) => this.onKill?.(enemy, impact, sever),
       bossChanged: (enemy) => this.onBoss?.(enemy),
     });
@@ -52,30 +75,30 @@ export class EnemyManager {
       () => this.byId,
       (enemy) => this.onBoss?.(enemy),
     );
-    this.simulation = new EnemySimulation(() => this.enemies, ctx.world, {
-      target: (enemy, dt) => this._pickTarget(enemy, dt) || ctx.player,
+    this.simulation = new EnemySimulation(() => this.enemies, services.world, {
+      target: (enemy, dt) => this.queries.pickTarget(enemy, dt) || services.player(),
       kill: (enemy, impact) => this.kill(enemy, impact),
     });
     this.actorServices = {
       environment: {
-        scene: ctx.scene,
-        resources: ctx.resources,
-        world: ctx.world,
-        navigation: () => ctx.nav,
+        scene: services.scene,
+        resources: services.resources,
+        world: services.world,
+        navigation: services.navigation,
       },
       feedback: {
-        effects: ctx.effects,
-        audio: ctx.audio,
-        hud: ctx.hud,
-        input: ctx.input,
-        boss: this.bossFeedback,
+        effects: services.effects,
+        audio: services.audio,
+        hud: services.hud,
+        input: services.input,
+        boss: bossFeedback,
       },
       policy: {
         present: (ref) => this.byId.get(ref.id) === ref,
         mirror: () => this.mirror,
         damageModifier: () => this.mods.damage,
         speedModifier: () => this.mods.speed,
-        localSpeed: () => ctx.player.speed,
+        localSpeed: () => services.player().speed,
         targets: () => this.targets(),
         kill: (ref, impact) => {
           const actor = this.resolveActor(ref);
@@ -89,14 +112,16 @@ export class EnemyManager {
           const actor = this.resolveActor(ref);
           if (actor) this.onBoss?.(actor);
         },
-        shieldBroken: () => this._shieldBroken(),
-        hitstop: (duration, scale) => ctx.game.hitstop(duration, scale),
+        shieldBroken: () => this.lifecycle.shieldBroken(),
+        hitstop: (duration, scale) => services.hitstop(duration, scale),
         explode: (ref, scale) => {
           const actor = this.resolveActor(ref);
-          if (actor) this._explodeBomber(actor, scale);
+          if (actor) this.lifecycle.explode(actor, scale);
         },
-        emit: (owner, position, direction, shot) =>
-          this.projectiles.fire(position, direction, { ...shot, owner }),
+        emit: (ref, position, direction, shot) => {
+          const owner = this.resolveActor(ref);
+          if (owner) this.projectiles.fire(position, direction, { ...shot, owner });
+        },
         blast: (ref, point, radius, damage) => {
           const actor = this.resolveActor(ref);
           if (actor) this.blastEnemies(point, radius, damage, actor);
@@ -107,29 +132,25 @@ export class EnemyManager {
     };
     this.projectiles = new Projectiles(
       {
-        world: ctx.world,
-        player: () => ctx.player,
+        world: services.world,
+        player: services.player,
         targets: () => this.targets(),
         allocateId: () => this.population.allocateId(),
         authoritative: () => !this.mirror,
         queries: this.queries,
         damage: (enemy, amount, hit) => this.damage(enemy, amount, hit),
         blast: (point, radius, damage, except) => this.blastEnemies(point, radius, damage, except),
-        effects: ctx.effects,
-        audio: ctx.audio,
+        effects: services.effects,
+        audio: services.audio,
       },
-      new ProjectileView(ctx.scene, 240),
+      new ProjectileView(services.scene, 240),
     );
-    this.onKill = null;
-    this.onBoss = null;
-    this._slot = 0;
-    this.mods = { speed: 1, damage: 1 };
-    // mirror mode: this peer is a client; the host owns AI, physics and health, we only render
-    this.mirror = false;
-    this.onClientHit = null;
-    this.onSpawn = null;
+    this.playback = new EnemyPlayback(
+      () => this.enemies,
+      (enemy, dt, now) => this.replication.interpolate(enemy, dt, now),
+    );
   }
-  resolveActor(ref) {
+  private resolveActor(ref: EnemyActorRef): EnemyActor | null {
     const actor = this.byId.get(ref.id);
     return actor === ref ? actor : null;
   }
@@ -144,12 +165,9 @@ export class EnemyManager {
   }
   // Everyone an enemy may go after. Solo play is just the local player.
   targets() {
-    return this.ctx.targets ? this.ctx.targets() : [this.ctx.player];
+    return this.services.targets ? this.services.targets() : [this.services.player()];
   }
-  _pickTarget(e, dt) {
-    return this.queries.pickTarget(e, dt);
-  }
-  nearestTarget(pos) {
+  nearestTarget(pos: THREE.Vector3) {
     return this.queries.nearestTarget(pos);
   }
   clear() {
@@ -157,53 +175,58 @@ export class EnemyManager {
     this.projectiles.clear();
     this.replication.clear();
   }
-  spawn(type, pos, id = null) {
-    const e = new EnemyActor(type, pos, this._slot++, this.actorServices),
+  spawn(type: EnemyKind, pos: THREE.Vector3, id: number | null = null) {
+    const e = new EnemyActor(type, pos, this.slot++, this.actorServices),
       T = e.T;
     e.id = id ?? this.population.allocateId();
     e.body.alwaysStep = true;
     if (T.flying) e.body.noSnap = true;
     e.root.position.copy(pos);
     e.root.scale.setScalar(0.001);
-    this.ctx.scene.add(e.root);
-    this.ctx.resources.track(e.root);
+    this.services.scene.add(e.root);
+    this.services.resources.track(e.root);
     this.population.add(e);
     if (this.onSpawn && !this.mirror) this.onSpawn(e);
-    this.ctx.effects.strokeBurst(
-      pos.clone().add(_v.set(0, 1, 0)),
+    this.services.effects.strokeBurst(
+      pos.clone().add(this.offset.set(0, 1, 0)),
       T.ink ?? INK.RED,
       T.boss ? 60 : 26,
       T.boss ? 10 : 6,
       { life: 0.5, size: 0.03 },
     );
-    this.ctx.audio.spawn(pos);
+    this.services.audio.spawn(pos);
     if (T.boss) {
-      this.ctx.audio.bossRoar(pos);
+      this.services.audio.bossRoar(pos);
       if (this.onBoss) this.onBoss(e);
     }
     return e;
   }
-  count(kind) {
+  count(kind: EnemyKind) {
     return this.population.count(kind);
   }
-  spawnReady(kind, position) {
+  spawnReady(kind: EnemyKind, position: THREE.Vector3) {
     const enemy = this.spawn(kind, position);
     enemy.state = 'hunt';
     enemy.root.scale.setScalar(enemy.T.scale);
   }
-  nearestVisible(from, forward, cosHalf, maxDist) {
+  nearestVisible(from: THREE.Vector3, forward: THREE.Vector3, cosHalf: number, maxDist: number) {
     return this.queries.nearestVisible(from, forward, cosHalf, maxDist);
   }
-  raycast(o, d, maxDist, ignore = null) {
+  raycast(o: THREE.Vector3, d: THREE.Vector3, maxDist: number, ignore: EnemyActor | null = null) {
     return this.queries.raycast(o, d, maxDist, ignore);
   }
-  inArc(pos, dir, range, cosHalf) {
+  inArc(pos: THREE.Vector3, dir: THREE.Vector3, range: number, cosHalf: number) {
     return this.queries.inArc(pos, dir, range, cosHalf);
   }
-  blastEnemies(point, radius, damage, except) {
-    this.area.blast(point, radius, damage, except);
+  blastEnemies(
+    point: THREE.Vector3,
+    radius: number,
+    damage: number,
+    except: EnemyActor | null = null,
+  ) {
+    this.areaDamage.blast(point, radius, damage, except);
   }
-  yank(e, target) {
+  yank(e: EnemyActor, target: THREE.Vector3) {
     if (!e.alive) return;
     if (e.T.boss) {
       e.hitFeedback.nudge();
@@ -214,38 +237,27 @@ export class EnemyManager {
     e.stunDur = 1.3;
     e.navigation.invalidate();
     e.flyer?.stun();
-    _d.subVectors(target, e.body.pos);
-    const dist = _d.length();
-    _d.divideScalar(Math.max(dist, 0.01));
-    e.body.vel.copy(_d).multiplyScalar(clamp(dist * 1.6, 10, 26));
+    this.direction.subVectors(target, e.body.pos);
+    const dist = this.direction.length();
+    this.direction.divideScalar(Math.max(dist, 0.01));
+    e.body.vel.copy(this.direction).multiplyScalar(clamp(dist * 1.6, 10, 26));
     e.body.vel.y = clamp(dist * 0.5, 4, 9);
     e.body.onGround = false;
-    this.ctx.effects.blood(e.center, _d, 0.4);
+    this.services.effects.blood(e.center, this.direction, 0.4);
   }
-  damage(e, amount, info) {
+  damage(e: EnemyActor, amount: number, info: EnemyImpact) {
     e.combat.damage(amount, info);
   }
-  _breakShield(e) {
-    if (e.disassembly?.breakShield()) this._shieldBroken();
-  }
-  _shieldBroken() {
-    this.lifecycle.shieldBroken();
-  }
-  kill(enemy, impact, notify = true) {
+  kill(enemy: EnemyActor, impact: EnemyImpact, notify = true) {
     this.lifecycle.kill(enemy, impact, notify);
   }
-  _explodeBomber(enemy, scale = 1) {
-    this.lifecycle.explode(enemy, scale);
-  }
-  eye(e, out) {
+  eye(e: EnemyActor, out: THREE.Vector3) {
     return e.eye(out);
   }
-  update(dt) {
-    if (this.mirror) {
-      this._updateMirror(dt);
-      return;
-    }
-    this.simulation.update(dt);
+  update(dt: number) {
+    if (this.mirror)
+      this.playback.update(dt, performance.now() / 1000, this.services.player().center);
+    else this.simulation.update(dt);
     this.projectiles.update(dt);
     this.population.retire(9, this.releaseEntity);
   }
@@ -254,52 +266,11 @@ export class EnemyManager {
   snapshot() {
     return this.replication.snapshot();
   }
-  applySnapshot(rows, now) {
+  applySnapshot(rows: readonly EnemySnapshot[], now: number) {
     this.replication.apply(rows, now);
   }
-  _updateMirror(dt) {
-    const now = performance.now() / 1000,
-      P = this.ctx.player;
-    for (const e of this.enemies) {
-      e.t += dt;
-      if (!e.alive) {
-        this._updateDead(e, dt);
-        continue;
-      }
-      e.hitFeedback.update(dt);
-      if (e.state === 'spawn') {
-        const f = clamp(e.t / 0.6, 0, 1);
-        e.root.scale.setScalar(
-          Math.max(0.001, f * e.T.scale * (1 + Math.sin(e.t * 60) * 0.12 * (1 - f))),
-        );
-        if (e.t >= 0.6) {
-          e.state = 'hunt';
-          e.root.scale.setScalar(e.T.scale);
-        }
-      }
-      this.replication.interpolate(e, dt, now);
-      e.root.position.copy(e.body.pos);
-      e.root.rotation.y = e.yaw;
-      this._animate(e, dt, P.center);
-      if (e.T.weapon === 'sniper')
-        e.telegraph.setVisible((e.rangedBehavior?.aimAmt ?? e.aimAmt) > 0.9);
-      this._syncHit(e);
-    }
-    this.projectiles.update(dt);
-    this.population.retire(9, this.releaseEntity);
-  }
   // the host tells us someone died; run the gore without touching scores
-  killMirror(id, impact) {
+  killMirror(id: number, impact: MirroredEnemyDeath) {
     this.lifecycle.killMirror(id, impact);
-  }
-  _syncHit(e) {
-    e.syncHit();
-  }
-  _updateDead(e, dt) {
-    e.updateDead(dt);
-  }
-
-  _animate(e, dt, point) {
-    e.animate(dt, point);
   }
 }

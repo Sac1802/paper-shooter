@@ -92,7 +92,20 @@ export function createRuntime(options) {
     },
     onPlayerDeath() {},
   });
-  const enemies = (ctx.enemies = new EnemyManager(ctx));
+  const enemies = (ctx.enemies = new EnemyManager({
+    scene: R.scene,
+    resources,
+    world,
+    navigation: () => ctx.nav,
+    player: () => ctx.player,
+    targets: () => (ctx.targets ? ctx.targets() : [ctx.player]),
+    effects,
+    audio,
+    hud,
+    input,
+    hitstop: (duration, scale) => game.hitstop(duration, scale),
+    score: (points, label) => game.addScore(points, label),
+  }));
   const player = (ctx.player = new Player(ctx));
   player.name = state.myName;
   const net = options.net ?? new Net();

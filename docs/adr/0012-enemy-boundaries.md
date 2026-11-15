@@ -30,6 +30,11 @@ would retain those dependencies.
   flying-fragment transfer recipes. Feedback emits the transfer event before debris registration;
   resources remain with the fragment owner. A reproduced nested-observer case established that
   suppressing one mirrored death must not globally suppress a different death notification.
+- EnemyManager is now a checked composition root and public enemy-system API. It receives explicit
+  environment/feedback capabilities and lazy player/navigation readers, never the application
+  runtime. Lazy readers preserve construction order and map replacement. EnemyPlayback owns client
+  frame progression, spawn presentation and replica animation without host AI or collision policy.
+  Both frame paths share projectile advancement and corpse retirement after actor updates.
 - EnemySimulation owns host frame phases, gravity/world integration, target separation and
   pair-separation cadence behind actor/world protocols. It retains live-array iteration so summons
   are processed in the same frame. Spawn finalization follows hit-region synchronization; target
@@ -115,10 +120,11 @@ ownership decisions. Narrow structural ports add explicit composition while allo
 collision/authority tests. Existing EnemyManager forwarding methods preserve actor/weapon callers
 until the remaining orchestration migration.
 
-This decision is incremental: the legacy manager capability binding and client-frame coordination still remain in
-the legacy JavaScript coordinator. Checked queries/projectiles/model recipes do not imply that the
-manager or its composition is checked. R3 and R5 remain open until those responsibilities have their
-own contracts and owners.
+The enemy subsystem composition is checked, including host/client frames and lifecycle binding.
+The application composition root remains JavaScript; R5 still covers its player/weapon/controller
+adapters. The composition constructor exceeds the advisory function-size threshold because it wires
+these owners explicitly; behavior remains in the individual components. It should not be hidden in
+manager-bound helper methods solely to satisfy a line count.
 
 ## Evidence
 
