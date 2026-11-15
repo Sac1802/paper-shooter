@@ -1,4 +1,5 @@
 import { createCombat } from './combat.js';
+import { UserSettings } from './user-settings.js';
 import { InkRenderer } from '../presentation/renderer.js';
 import { World } from '../engine/physics.js';
 import { Input } from '../platform/input.js';
@@ -183,6 +184,14 @@ export function createRuntime(options, actions) {
   player.name = state.myName;
   const remoteServices = { scene: R.scene, resources, effects, localEye: () => player.eye };
   const net = options.net ?? new Net();
+  const userSettings = new UserSettings({
+    state,
+    preferences,
+    input,
+    audio,
+    player,
+    transport: net,
+  });
   const remote = new Map();
   const lobby = {
     players: new Map(),
@@ -242,15 +251,7 @@ export function createRuntime(options, actions) {
   }
   const setArena = (arena) =>
     setLevel(knownMap(net.active ? lobby.map || state.mapKey : state.mapKey), arena);
-  function applySettings() {
-    const settings = state.settings;
-    input.mouseSens = (0.0022 * settings.sens) / 100;
-    input.padSensX = (3.4 * settings.sens) / 100;
-    input.padSensY = (2.6 * settings.sens) / 100;
-    input.invertY = settings.invert;
-    preferences.write('sens', settings.sens);
-    preferences.write('invert', settings.invert ? '1' : '0');
-  }
+  const applySettings = () => userSettings.applyLook();
   audio.setTune(state.mapKey === 'mexico' ? 'mexico' : 'district');
   resources.track(R.scene);
   return {
@@ -281,5 +282,6 @@ export function createRuntime(options, actions) {
     setLevel,
     setArena,
     applySettings,
+    userSettings,
   };
 }

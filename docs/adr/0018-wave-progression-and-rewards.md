@@ -37,7 +37,7 @@ responsibilities without changing their balance or introducing an event bus.
 
 The existing boss fallback remains bounded to 200 attempts and retains its original coordinates,
 distances and collision checks. Making those bounds configurable/map-aware is a separate gameplay
-decision, not hidden inside this extraction. Entry/runtime composition, focus, screens, multiplayer
+decision, not hidden inside this extraction. Entry/runtime composition, screens, multiplayer
 binding and the loop still have unchecked JavaScript boundaries under R2/R5.
 
 ## Evidence

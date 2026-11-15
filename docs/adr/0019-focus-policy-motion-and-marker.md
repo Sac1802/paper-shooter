@@ -37,7 +37,7 @@ order remain unchanged.
 
 ## Composition and actor size review
 
-Adding the scoped wiring raises `application.js` to 320 physical / 315 code lines and its
+At focus extraction, the scoped wiring raises `application.js` to 320 physical / 315 code lines and its
 `createApplication` function to 300 code lines. Retain a temporary composition exception for
 explicit construction, capability mapping, development API and disposal; moving those mappings to
 helpers bound to runtime would hide the same dependencies. This does not certify its unchecked
@@ -45,6 +45,8 @@ JavaScript, callback construction ordering or remaining screen/network/loop coup
 open. New rules/calculations belong in their owners, and adding another controller, lifecycle
 responsibility or consumer triggers another review. Checked entry/runtime composition remains the
 next structural remedy rather than compressing formatting or suppressing warnings.
+The subsequent settings wiring review and current counts are recorded in
+[ADR 0020](0020-user-settings-and-preference-port.md).
 
 The four-line player command extends the existing facade exception to 462 physical / 449 code
 lines; its constructor remains 109 code lines. The command forwards an existing attack using the

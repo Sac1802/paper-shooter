@@ -1,7 +1,7 @@
 import type { PerspectiveCamera, Scene } from 'three';
 import type { Net } from '../network/peer-transport.js';
 import type { Input } from '../platform/input.js';
-import type { Preferences } from '../platform/preferences.js';
+import type { PreferencePort } from '../platform/preferences.js';
 import type { HUD } from '../presentation/hud.js';
 import type { Sfx } from '../presentation/audio.js';
 
@@ -21,7 +21,7 @@ export interface ApplicationOptions {
   renderer?: RenderingPort;
   input?: Input;
   hud?: HUD;
-  preferences?: Preferences;
+  preferences?: PreferencePort;
   net?: Net;
   audio?: Sfx;
   autoStart?: boolean;

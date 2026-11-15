@@ -102,6 +102,11 @@ actor's katana command rather than reaching into weapon/frame internals. See
 [ADR 0019](adr/0019-focus-policy-motion-and-marker.md), including the reviewed composition-size
 exception; runtime/entry typing remains open.
 
+UserSettings owns checked look/music/name edits and persistence/adapter synchronization.
+SettingsPanel only formats/binds a narrow view and commands; checkbox and keyboard paths share
+the music preference owner. PreferencePort makes save loading/writing replaceable without the
+concrete storage class. See [ADR 0020](adr/0020-user-settings-and-preference-port.md).
+
 The loop keeps the original variable timestep, capped at 50 ms, hitstop and focus scaling. Input,
 simulation, death/respawn, idle/lobby updates and presentation have separate phases. Moving to a
 fixed timestep, rollback netcode or a different physics engine would change behavior and needs a
@@ -124,7 +129,7 @@ separate decision and regression baseline.
 
 TypeScript strict mode covers domain rules, shared contracts, physics/math, registry, network
 configuration/discovery, backend, model recipes, player/weapon components, enemy composition,
-session transitions, focus/wave/reward/match/pickup rules and presentation, remote target/combat composition and lobby connection/recovery. Legacy procedural
+session transitions, user settings, focus/wave/reward/match/pickup rules and presentation, remote target/combat composition and lobby connection/recovery. Legacy procedural
 maps/effects, transport, runtime composition and several application/presentation adapters remain
 JavaScript under `allowJs` with `checkJs: false`; those boundaries are **not** fully statically checked. Tests and
 coverage include them. This is an explicit incremental typing decision, not a completed conversion
@@ -132,7 +137,7 @@ of every source file. See [ADR 0003](adr/0003-modular-architecture.md).
 
 ## Remaining decomposition
 
-Runtime composition, screen read models, settings and multiplayer
+Runtime composition, remaining screen read models/routing and multiplayer
 message/idle/synchronization policy still need narrower
 checked boundaries. The enemy subsystem now has checked composition and separate behavior,
 simulation, replication and presentation owners. Extracted effects remain JavaScript, and some

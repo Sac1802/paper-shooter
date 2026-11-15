@@ -4,6 +4,7 @@ import { createRuntime } from './runtime.js';
 import { PickupController } from './pickups.js';
 import { FocusController } from './focus.js';
 import { FocusMarker } from '../presentation/focus-marker.js';
+import { SettingsPanel } from '../presentation/settings-panel.js';
 import { WaveController } from './waves.js';
 import { EnemyRewards } from './enemy-rewards.js';
 import { MatchController } from './match.js';
@@ -182,7 +183,9 @@ export function createApplication(options) {
     refreshScores: () => match.refreshScoreHud(),
     respawnLocal: () => match.respawnLocal(),
   });
+  const settingsPanel = new SettingsPanel(runtime.state, runtime.userSettings);
   const screens = createScreens(runtime, {
+    settingsPanel,
     cancelPending: () => multiplayer.cancelPending(),
     lobbyRows: (...args) => multiplayer.lobbyRows(...args),
     friendlyError: (...args) => multiplayer.friendlyError(...args),

@@ -4,8 +4,7 @@ import { FFA_TARGET } from '../domain/match';
 import { escapeHtml as esc } from '../presentation/html';
 
 export function createScreens(runtime, actions = {}) {
-  const audio = runtime.audio;
-  const { hud, applySettings, preferences, player, net, lobby, game, online } = runtime;
+  const { hud, preferences, net, lobby, game, online } = runtime;
   const {
     cancelPending,
     lobbyRows,
@@ -21,47 +20,12 @@ export function createScreens(runtime, actions = {}) {
     begin,
     sortedScores,
     toMainMenu,
+    settingsPanel,
   } = actions;
   // ---------------- screens ----------------
-  function settingsHTML() {
-    return `<div class="settings" id="settings">
-    <label>look sensitivity <input type="range" id="setSens" min="25" max="250" step="5" value="${runtime.state.settings.sens}"><b id="setSensV">${runtime.state.settings.sens}%</b></label>
-    <label><input type="checkbox" id="setInv" ${runtime.state.settings.invert ? 'checked' : ''}> invert vertical look</label>
-    <label><input type="checkbox" id="setMus" ${runtime.state.musicWanted ? 'checked' : ''}> music <span class="k">(M)</span></label>
-  </div>`;
-  }
-  function wireSettings() {
-    const box = hud.el.panel.querySelector('#settings');
-    if (!box) return;
-    box.addEventListener('click', (e) => e.stopPropagation());
-    box.addEventListener('keydown', (e) => e.stopPropagation());
-    const sens = box.querySelector('#setSens'),
-      out = box.querySelector('#setSensV');
-    sens.addEventListener('input', () => {
-      runtime.state.settings.sens = Number(sens.value);
-      out.textContent = runtime.state.settings.sens + '%';
-      applySettings();
-    });
-    box.querySelector('#setInv').addEventListener('change', (e) => {
-      runtime.state.settings.invert = e.target.checked;
-      applySettings();
-    });
-    box.querySelector('#setMus').addEventListener('change', (e) => {
-      runtime.state.musicWanted = e.target.checked;
-      preferences.write('music', runtime.state.musicWanted ? '1' : '0');
-      audio.musicOn(runtime.state.musicWanted);
-    });
-  }
-  function wireName(box) {
-    const nb = box.querySelector('#setName');
-    if (!nb) return;
-    nb.addEventListener('input', (e) => {
-      runtime.state.myName = e.target.value.trim().slice(0, 14) || runtime.state.myName;
-      preferences.write('name', runtime.state.myName);
-      player.name = runtime.state.myName;
-      net.hostName = runtime.state.myName;
-    });
-  }
+  const settingsHTML = () => settingsPanel.html();
+  const wireSettings = () => settingsPanel.wire(hud.el.panel);
+  const wireName = (box) => settingsPanel.wireName(box);
   function checkpointHTML() {
     if (runtime.state.checkpoint < 5) return '';
     let h = '<div class="checkpoints"><span>checkpoints</span>';

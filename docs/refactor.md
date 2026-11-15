@@ -64,4 +64,6 @@ gate does not close those findings or complete the remaining gameplay/controller
   independent kill-reward owner; composition owns enemy observers and grenade transport binding.
 - Replaced focus runtime access with checked policy/motion/attack ports and a separate marker
   projection owner; preserved the recorded two-execution chain and collision/feedback behavior.
+- Centralized look/music/name edits in a checked settings owner and a DOM-only settings adapter;
+  replaced the concrete preferences option with a structural loading/writing contract.
 - Added deterministic unit/integration tests, Chromium smoke tests, coverage imports and pinned CI actions.

@@ -3,7 +3,7 @@ import { clamp } from '../engine/math.js';
 
 export function createLoop(runtime, actions = {}) {
   const audio = runtime.audio;
-  const { net, input, game, hud, online, preferences, player, enemies, effects, remote, R } =
+  const { net, input, game, hud, online, userSettings, player, enemies, effects, remote, R } =
     runtime;
   const {
     resume,
@@ -58,10 +58,8 @@ export function createLoop(runtime, actions = {}) {
 
   function updateMusicInput() {
     if (!input.pressed('music')) return;
-    runtime.state.musicWanted = !runtime.state.musicWanted;
-    preferences.write('music', runtime.state.musicWanted ? '1' : '0');
-    audio.musicOn(runtime.state.musicWanted);
-    hud.tip(runtime.state.musicWanted ? 'music on' : 'music off', 1.5);
+    const wanted = userSettings.toggleMusic();
+    hud.tip(wanted ? 'music on' : 'music off', 1.5);
   }
 
   function updateBoard(playing) {

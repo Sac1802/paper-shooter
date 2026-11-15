@@ -1,4 +1,18 @@
 import { knownMap } from '../domain/maps';
+import type { MapKey } from '../domain/maps';
+
+export interface SavedPreferences {
+  mapKey: MapKey;
+  best: number;
+  checkpoint: number;
+  musicWanted: boolean;
+  myName: string;
+  settings: { sens: number; invert: boolean };
+}
+export interface PreferencePort {
+  load(random?: () => number): SavedPreferences;
+  write(key: string, value: string | number | boolean): void;
+}
 
 export interface StoragePort {
   getItem(key: string): string | null;
@@ -12,7 +26,7 @@ function boundedNumber(value: string | null, fallback: number, min: number, max:
 }
 
 /** Reads old saves lazily and writes only the Paper namespace. Storage can be disabled by a browser. */
-export class Preferences {
+export class Preferences implements PreferencePort {
   constructor(private readonly storage: StoragePort | null) {}
 
   read(key: string): string | null {
@@ -35,7 +49,7 @@ export class Preferences {
     }
   }
 
-  load(random: () => number = Math.random) {
+  load(random: () => number = Math.random): SavedPreferences {
     return {
       mapKey: knownMap(this.read('map')),
       best: boundedNumber(this.read('best'), 0, 0, Number.MAX_SAFE_INTEGER),

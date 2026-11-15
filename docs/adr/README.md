@@ -21,6 +21,7 @@
 | [0017](0017-pickup-policy-and-presentation.md)      | Pickup collection/authority policy, models and retained palette     | Accepted |
 | [0018](0018-wave-progression-and-rewards.md)        | Solo progression, spawn policy, reward commands and event binding   | Accepted |
 | [0019](0019-focus-policy-motion-and-marker.md)      | Focus policy, dash motion, marker projection and composition review | Accepted |
+| [0020](0020-user-settings-and-preference-port.md)   | User preference edits, DOM commands and structural persistence      | Accepted |
 
 Each decision records context, alternatives, consequences and evidence. Revisit a decision when its
 constraints change; retain superseded records so their reasoning remains available.
