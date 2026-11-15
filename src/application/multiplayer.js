@@ -7,6 +7,8 @@ import { knownMap } from '../domain/maps';
 import { IdlePlayers } from './idle-players.js';
 import { MatchClock } from './match-clock.js';
 import { NetworkSync } from './network-sync.js';
+import { CombatMessages } from './combat-messages.js';
+import { NetworkCombatFeedback } from '../presentation/network-combat-feedback.js';
 
 export function createMultiplayer(runtime, actions = {}) {
   const audio = runtime.audio;
@@ -57,10 +59,29 @@ export function createMultiplayer(runtime, actions = {}) {
   });
   const leaveOnline = (reason) => connection.leaveOnline(reason);
   const migrateHost = () => connection.migrateHost();
-  // ---------------- networking ----------------
-  const TRACER_THICK = { rifle: 0.02, shotgun: 0.014, sniper: 0.03 };
-  const _sm = new THREE.Vector3(),
-    _se = new THREE.Vector3();
+  const combatFeedback = new NetworkCombatFeedback({
+    player,
+    opponents: remote,
+    effects,
+    audio,
+    input,
+    hud,
+  });
+  const combatMessages = new CombatMessages({
+    player,
+    game,
+    transport: net,
+    scores,
+    opponents: remote,
+    feedback: {
+      death: (point) => audio.enemyDie(point),
+      kill: () => audio.kill(true),
+      feed: (text) => hud.kill(text, 0),
+      parry: (returned) => combatFeedback.parry(returned),
+      cut: () => combatFeedback.cut(),
+    },
+    tally: tallyDeath,
+  });
 
   function addRemote(id, name) {
     if (remote.has(id)) {
@@ -212,67 +233,16 @@ export function createMultiplayer(runtime, actions = {}) {
       r.lastSeen = performance.now();
     }
   });
-  net.on('pdmg', (d, from) => {
-    if (!player.alive || game.state !== 'play' || player.shieldT > 0) return;
-    player.lastHitBy = from || null;
-    player.lastHit = { from: d.from || null, crit: !!d.crit, amount: d.amount, src: d.src };
-    player.takeDamage(d.amount, d.from ? new THREE.Vector3().fromArray(d.from) : null);
-  });
-  net.on('pdead', (d, from) => {
-    const r = remote.get(from);
-    const vn = r ? r.name : 'someone';
-    const kn = d.killer && scores.get(d.killer) ? scores.get(d.killer).name : null;
-    if (r) {
-      r.ragdoll(d.dir ? new THREE.Vector3().fromArray(d.dir) : null, !!d.over);
-      audio.enemyDie(r.center);
-    }
-    const how = d.how ? ' · ' + d.how + (d.crit ? ' headshot' : '') : '';
-    if (d.killer === net.id) {
-      game.kills++;
-      game.addScore(100, 'ERASED ' + vn + how);
-      audio.kill(true);
-    } else hud.kill(kn ? kn + ' erased ' + vn + how : vn + ' fell off the page', 0);
-    if (net.isHost) tallyDeath(from, d.killer);
-  });
-  net.on('nade', (d) => player.throwGrenade(d));
+  net.on('pdmg', (data, sender) => combatMessages.damage(data, sender));
+  net.on('pdead', (data, sender) => combatMessages.death(data, sender));
+  net.on('nade', (data) => combatMessages.grenade(data));
   net.on('brk', (d) => {
     const br = runtime.state.level.breakables[d.id];
     if (br) breakProp(br, null, false);
   });
-  net.on('parry', (d) => {
-    audio.shieldHit(player.center);
-    input.rumble(0.35, 0.3, 60);
-    effects.strokeBurst(player.eye.clone().addScaledVector(player.forward, 0.5), INK.ORANGE, 8, 5, {
-      life: 0.2,
-      size: 0.03,
-    });
-    hud.kill(d.ret ? 'RETURN TO SENDER' : 'DEFLECTED', d.ret ? 25 : 0);
-  });
-  net.on('shots', (d, from) => {
-    const r = remote.get(from);
-    if (!r || !r.root || !r.alive) return;
-    _sm.set(
-      r.body.pos.x + r.right.x * 0.3 + r.forward.x * 0.8,
-      r.body.pos.y + 1.35 + r.forward.y * 0.8,
-      r.body.pos.z + r.right.z * 0.3 + r.forward.z * 0.8,
-    );
-    const th = TRACER_THICK[d.k] || 0.02;
-    const e = d.e || [];
-    for (let i = 0; i + 2 < e.length; i += 3) {
-      _se.set(e[i], e[i + 1], e[i + 2]);
-      effects.tracer(_sm, _se, INK.BLUE, th, 0.06);
-    }
-    r.flash();
-    audio.remoteShot(d.k, _sm);
-  });
-  net.on('cut', () => {
-    if (player.grapple.state !== 'idle') {
-      player.detachGrapple(false);
-      effects.strokeBurst(player.center, INK.ORANGE, 8, 4, { life: 0.25, size: 0.03 });
-      hud.tip('your rope got cut', 1.3);
-      input.rumble(0.5, 0.3, 80);
-    }
-  });
+  net.on('parry', (data) => combatMessages.parry(data));
+  net.on('shots', (data, sender) => combatFeedback.shots(data.k, data.e, sender));
+  net.on('cut', () => combatMessages.cut());
   net.onHost('score', (rows) => {
     if (!net.isHost) applyScores(rows);
   });
