@@ -48,6 +48,13 @@ credential requests return 503 and play uses available direct/STUN routes. An ex
 `VITE_TURN_CREDENTIALS_URL` disables credential requests. Changing private/provider/STUN environment
 values requires container recreation; changing browser `VITE_*` variables requires rebuilding.
 
+Preserve the existing private `.env` values when upgrading. Set a deployment-specific
+`VITE_LOBBY_NAMESPACE`, for example `didaskalia-papershooter-v1-`, before building; use a different
+value for previews. The Paper defaults now isolate discovery from upstream Doodle clients even when
+both use PeerServer Cloud. Existing clients must reload and open new lobbies after this change.
+Changing only the container runtime environment cannot update a namespace already bundled into
+browser JavaScript. See [networking](networking.md) for discovery and signaling boundaries.
+
 The multi-stage build pins base image digests, installs the locked dependencies once, compiles the
 frontend/server and copies only runtime artifacts. The `app` target runs as `node`, drops
 capabilities, uses a read-only filesystem and has a health check. It contains no application

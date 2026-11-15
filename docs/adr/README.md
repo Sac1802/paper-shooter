@@ -30,6 +30,7 @@
 | [0026](0026-checked-multiplayer-composition.md)               | Checked multiplayer composition and consumed transport/actor protocols | Accepted |
 | [0027](0027-checked-construction-and-adapter-capabilities.md) | Checked application construction and injectable adapter capabilities   | Accepted |
 | [0028](0028-checked-map-kit-and-stable-recipes.md)            | Checked reusable map kit with unchanged procedural recipes             | Accepted |
+| [0029](0029-independent-lobby-namespaces.md)                  | Independent Paper lobby discovery on shared signaling infrastructure   | Accepted |
 
 Each decision records context, alternatives, consequences and evidence. Revisit a decision when its
 constraints change; retain superseded records so their reasoning remains available.

@@ -33,8 +33,9 @@ Do not publish permanent TURN credentials or provider secrets in Vite variables.
 - An authoritative game server could improve cheat resistance; it is a gameplay/protocol redesign
   outside a behavior-preserving refactor. Existing host migration and lobby discovery remain.
 
-Keep the deployed lobby namespace compatible by default and isolate localhost lobbies. A custom
-namespace is recommended for intentionally separate deployments or future incompatible protocols.
+The original decision retained the deployed upstream lobby namespace and isolated localhost lobbies.
+[ADR 0029](0029-independent-lobby-namespaces.md) amends that choice: Paper now uses independent
+production and development defaults, with configurable namespaces for separate deployments.
 
 ## Evidence
 

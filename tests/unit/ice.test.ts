@@ -38,9 +38,10 @@ describe('provider-independent ICE configuration', () => {
     ])
       expect(() => credentialEndpoint(value)).toThrow();
   });
-  it('uses isolated local signaling and allows self-hosted PeerServer', () => {
-    expect(networkConfig({}, 'localhost').namespace).toBe('doodledev-');
-    expect(networkConfig({}, 'game.example').namespace).toBe('doodledistrict-');
+  it('isolates Paper lobbies from upstream and local development and allows self-hosted signaling', () => {
+    for (const hostname of ['localhost', '127.0.0.1', '[::1]'])
+      expect(networkConfig({}, hostname).namespace).toBe('papershooter-dev-');
+    expect(networkConfig({}, 'game.example').namespace).toBe('papershooter-');
     const configured = networkConfig(
       {
         VITE_LOBBY_NAMESPACE: 'my-game-',

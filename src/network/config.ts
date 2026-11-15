@@ -5,7 +5,9 @@ export type NetworkEnvironment = Record<string, string | boolean | undefined>;
 
 export function networkConfig(env: NetworkEnvironment, hostname: string) {
   const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(hostname);
-  const namespace = String(env.VITE_LOBBY_NAMESPACE || (local ? 'doodledev-' : 'doodledistrict-'));
+  const namespace = String(
+    env.VITE_LOBBY_NAMESPACE || (local ? 'papershooter-dev-' : 'papershooter-'),
+  );
   if (!/^[a-zA-Z0-9_-]{1,64}$/.test(namespace)) throw new TypeError('Invalid lobby namespace');
   const peer: PeerOptions = { debug: 0 };
   if (env.VITE_PEER_HOST) {
