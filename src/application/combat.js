@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { GrenadeBlast } from '../gameplay/combat/grenade-blast.js';
+import { RopeCuts } from '../gameplay/combat/rope-cuts.js';
 import { PlayerQueries } from '../gameplay/combat/player-queries.js';
 import { INK } from '../shared/ink.js';
 import { rand, clamp } from '../engine/math.js';
@@ -21,28 +23,19 @@ export function createCombat(runtime, actions = {}) {
     shotQueue,
   } = runtime;
   const { spawnPickup } = actions;
-  player.grenadeSystem.onExplosion = (c, mine) => {
-    const R = 6.4;
-    ctx.effects.boom(c, R);
-    audio.explosion(c);
-    ctx.input.rumble(0.9, 0.9, 220);
-    // bots: the thrower's client reports the damage (host applies it; a client's report is forwarded)
-    if (mine) ctx.enemies.blastEnemies(c, R, 120, null);
-    if (mine && ctx.blastBreakables) ctx.blastBreakables(c, R);
-    // me: my own grenade, or anyone else's that went off on my screen
-    const d = player.center.distanceTo(c);
-    if (player.alive && d < R * 0.95) {
-      player.takeDamage(10 + 34 * (1 - d / (R * 0.95)), c);
-      player.knockback(_v.subVectors(player.center, c).normalize(), 9);
-    }
-    // other players in a versus match, decided by the thrower only
-    if (mine && ctx.targets)
-      for (const t of ctx.targets()) {
-        if (t.isLocal || !t.alive || (ctx.canHurt && !ctx.canHurt(t))) continue;
-        const dd = t.center.distanceTo(c);
-        if (dd < R * 0.95) t.takeDamage(12 + 50 * (1 - dd / (R * 0.95)), c);
-      }
-  };
+  const blast = new GrenadeBlast({
+    local: player,
+    targets: () => ctx.targets(),
+    canHurt: (target) => ctx.canHurt(target),
+    present: (point, radius) => {
+      effects.boom(point, radius);
+      audio.explosion(point);
+      input.rumble(0.9, 0.9, 220);
+    },
+    enemies: (point, radius, damage) => ctx.enemies.blastEnemies(point, radius, damage, null),
+    props: (point, radius) => ctx.blastBreakables?.(point, radius),
+  });
+  player.grenadeSystem.onExplosion = (point, mine) => blast.explode(point, mine);
   // anything a bullet or a blade can hit besides enemies
   ctx.targets = () => [player, ...remote.values()];
   ctx.canHurt = (t) => online() && t !== player;
@@ -106,34 +99,15 @@ export function createCombat(runtime, actions = {}) {
       src: info.source,
     });
   };
-  // a slash through another player's rope cuts it: their client drops the hook
-  const _rp = new THREE.Vector3(),
-    _rq = new THREE.Vector3();
-  ctx.cutRopes = (eye, dir, range) => {
-    let cut = false;
-    for (const r of remote.values()) {
-      if (!r.alive || !r.grappling) continue;
-      _rp.set(
-        r.body.pos.x + r.right.x * 0.35,
-        r.body.pos.y + 1.25,
-        r.body.pos.z + r.right.z * 0.35,
-      );
-      for (let i = 0; i <= 14; i++) {
-        _rq.lerpVectors(_rp, r.gPoint, i / 14).sub(eye);
-        const t = _rq.dot(dir);
-        if (t < 0.3 || t > range) continue;
-        const lat = Math.sqrt(Math.max(0, _rq.lengthSq() - t * t));
-        if (lat > 0.9) continue;
-        _rq.add(eye);
-        effects.strokeBurst(_rq, INK.ORANGE, 10, 5, { life: 0.25, size: 0.035 });
-        net.sendTo(r.id, 'cut', {});
-        hud.tip('ROPE CUT', 0.9);
-        cut = true;
-        break;
-      }
-    }
-    return cut;
-  };
+  const ropes = new RopeCuts(
+    () => remote.values(),
+    (id, point) => {
+      effects.strokeBurst(point, INK.ORANGE, 10, 5, { life: 0.25, size: 0.035 });
+      net.sendTo(id, 'cut', {});
+      hud.tip('ROPE CUT', 0.9);
+    },
+  );
+  ctx.cutRopes = (...args) => ropes.cut(...args);
   const _v = new THREE.Vector3();
   // breakable props: bullets, blades and blasts break them, and everyone in a match sees it go
   ctx.breakHit = (br, dmg, point, dir) => {
