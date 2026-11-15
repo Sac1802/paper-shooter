@@ -1,9 +1,10 @@
 import * as THREE from 'three';
+import { PvpDamage } from '../gameplay/combat/pvp-damage.js';
 import { GrenadeBlast } from '../gameplay/combat/grenade-blast.js';
 import { RopeCuts } from '../gameplay/combat/rope-cuts.js';
 import { PlayerQueries } from '../gameplay/combat/player-queries.js';
 import { INK } from '../shared/ink.js';
-import { rand, clamp } from '../engine/math.js';
+import { rand } from '../engine/math.js';
 
 export function createCombat(runtime, actions = {}) {
   const audio = runtime.audio;
@@ -46,59 +47,29 @@ export function createCombat(runtime, actions = {}) {
   );
   ctx.raycastPlayers = (...args) => queries.raycast(...args);
   ctx.playersInArc = (...args) => queries.inArc(...args);
-  ctx.hitPlayer = (t, dmg, info) => {
-    if (!ctx.canHurt(t) || !t.alive) return;
-    // a raised katana facing you parries a slash outright and turns some bullets aside
-    // the bullet met the blade itself: it glances off, and now and then comes straight back at you
-    if (info.part === 'blade') {
-      effects.strokeBurst(info.point, INK.ORANGE, 8, 6, { life: 0.22, size: 0.035 });
-      audio.shieldHit(t.center);
-      const ret = Math.random() < 0.4;
-      if (ret) {
-        effects.tracer(info.point, player.eye, INK.RED, 0.03, 0.08);
-        hud.tip('RETURNED', 0.9);
-        input.rumble(0.5, 0.4, 90);
-        player.lastHitBy = t.id;
-        player.lastHit = {
-          from: t.center.toArray(),
-          crit: false,
-          amount: dmg * 0.6,
-          src: 'deflect',
-        };
-        player.takeDamage(dmg * 0.6, t.center);
-      } else hud.tip('DEFLECTED', 0.7);
-      net.sendTo(t.id, 'parry', { ret, by: net.id });
-      return;
-    }
-    const facing = t.blocking
-      ? _v.subVectors(player.center, t.center).normalize().dot(t.forward)
-      : -1;
-    const frontHit = /^(head|torso|arm|fore)/.test(info.part || '');
-    // a slash is only parried by a guard that just came up and faces you
-    if (facing > 0.6 && frontHit && info.source === 'katana' && t.parryWindow) {
-      effects.strokeBurst(info.point, INK.ORANGE, 10, 6, { life: 0.25, size: 0.04 });
-      audio.shieldHit(t.center);
-      game.hitstop(0.08, 0.15);
-      player.weapons[player.katanaIndex].cooldown = Math.max(
-        player.weapons[player.katanaIndex].cooldown,
-        0.6,
-      );
-      input.rumble(0.6, 0.3, 90);
-      hud.tip('PARRIED', 0.9);
-      return;
-    }
-    effects.blood(info.point, info.dir, clamp(0.4 + dmg / 80, 0.4, 1.6), { ink: INK.RED });
-    hud.hitmarker(false, info.crit);
-    audio.hitEnemy(t.center);
-    t.flash();
-    net.sendTo(t.id, 'pdmg', {
-      amount: Math.round(dmg),
-      from: player.center.toArray().map((v) => +v.toFixed(1)),
-      by: net.id,
-      crit: !!info.crit,
-      src: info.source,
-    });
-  };
+  const pvp = new PvpDamage({
+    canHurt: (target) => ctx.canHurt(target),
+    local: player,
+    postponeMelee: (duration) => {
+      const blade = player.weapons[player.katanaIndex];
+      if (blade.kind === 'katana') blade.cooldown = Math.max(blade.cooldown, duration);
+    },
+    hitstop: (duration, scale) => game.hitstop(duration, scale),
+    effects,
+    audio,
+    hud,
+    rumble: (...args) => input.rumble(...args),
+    reportGuard: (id, returned) => net.sendTo(id, 'parry', { ret: returned, by: net.id }),
+    reportDamage: (id, amount, origin, critical, source) =>
+      net.sendTo(id, 'pdmg', {
+        amount: Math.round(amount),
+        from: origin.toArray().map((value) => +value.toFixed(1)),
+        by: net.id,
+        crit: critical,
+        src: source,
+      }),
+  });
+  ctx.hitPlayer = (...args) => pvp.hit(...args);
   const ropes = new RopeCuts(
     () => remote.values(),
     (id, point) => {
