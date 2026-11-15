@@ -17,17 +17,17 @@ Branch coverage is reported separately and still has room to improve in combat, 
 failure paths. Do not describe line coverage as branch coverage or lower Sonar's gate to hide a
 missing report. Sonar's own new-code/condition calculations can differ from the local total.
 
-Local whole-product measurement at `6f63fe3` on 2026-11-15 with the scoped integration deadline
+Local whole-product measurement at `c0b863d` on 2026-11-15 with the scoped integration deadline
 below (later CI/generated reports supersede these snapshot values):
 
 | Metric                      | Result                                                           |
 | --------------------------- | ---------------------------------------------------------------- |
-| Unit/integration tests      | 435 passing across 102 files, including architecture regressions |
-| Statements                  | 95.46%                                                           |
+| Unit/integration tests      | 436 passing across 102 files, including architecture regressions |
+| Statements                  | 95.43%                                                           |
 | Lines                       | 96.61%                                                           |
-| Functions                   | 94.18%                                                           |
-| Branches                    | 89.32%                                                           |
-| Production dependency audit | 0 known advisories at the time of inspection                     |
+| Functions                   | 94.20%                                                           |
+| Branches                    | 89.26%                                                           |
+| Production dependency audit | 0 known advisories in the 2026-11-15 production audit            |
 
 The generated report and latest CI run are authoritative. Test seeds are fixed so procedural
 variation does not randomly change assertions/coverage. Dependency advisories are time-sensitive;
@@ -73,6 +73,12 @@ rerun `pnpm audit --prod` when updating dependencies or preparing a release.
   tests preserve damage guards/attribution, remote death/credit/tally order, tracer geometry and
   feedback. Reproduced regressions reject buffered data from retired/superseded channels and use
   safe numeric/null fallbacks for prototype-named unknown weapon/kill-source labels.
+- Strict TypeScript now checks actual runtime/application construction against the consumed
+  adapter and controller capabilities, including tuple grenade reports, map identities and
+  gun/blade HUD discrimination. The map kit and pure wall intervals are checked without changing
+  recipe content. Effects retain same-frame emission/compaction and pooled buffer output.
+  A failing-before-fix clock test prevents a recovering host from publishing results before it has
+  an identity; existing end/report/timer ordering remains covered.
 - Ten pre-extraction enemy archetype traces: geometry, AI/animation/projectiles, random draw order
   and death/resource retirement; isolated target queries, route/formation steering, projectile
   authority/deflection, sniper/burst cycles and presentation lifetime checks. A historical client
@@ -91,7 +97,7 @@ real pass/uniform/envelope/controller behavior. They do not prove shader appeara
 GPU performance or NAT traversal. Chromium smoke tests run against `dist/` and exercise the actual
 browser renderer/menu/game code. Browser tests are not silently added to the unit coverage total.
 
-The composed map/snapshot/damage multiplayer scenario and three-client host recovery have local
+The composed map/snapshot/damage multiplayer scenario, silent-host timeout recovery and three-client host recovery have local
 10-second test deadlines: they build two/three complete applications, with repeated real map
 rebuilds in the first case. Instrumented CI execution of the first scenario exceeded Vitest's
 default 5 seconds. Fake clocks/message flushing remain bounded; other tests retain their default
@@ -130,16 +136,17 @@ included in the existing CI artifact for investigation.
 
 The [Sonar rerun](https://github.com/meyer-pidiache/papershooter/actions/runs/43590008110) at `871d851`
 passed the unchanged gate: 80.6% new-code coverage, 0.2% duplication, no open bugs/vulnerabilities
-and no pending security hotspots. It still reports 148 code smells. Five asynchronous-failure
+and no pending security hotspots. That analysis reported 148 code smells. Five asynchronous-failure
 findings from the initial scan were corrected and covered by regressions; they were not dismissed.
 HMAC-SHA1 in the coturn adapter is protocol compatibility, with a private
 signing secret and expiring credentials; it is not used to store passwords. Keep original upstream
 attribution and the scoped license notice intact.
 
-The subsequent [manual refactor review](reviews/2026-11-14-refactor.md) identifies remaining
-controller/composition and presentation work, alongside the implemented enemy owners and resolved
-payload/resource findings. These green checks do not prove the complete architectural review
-finished. `pnpm review:structure` publishes advisory size/complexity findings alongside coverage;
+The [manual refactor review](reviews/2026-11-14-refactor.md) records the original findings and their
+implementation evidence. The [construction checkpoint](reviews/2026-11-15-construction-checkpoint.md)
+records retained size/complexity scopes and JavaScript migration debt. Construction, adapter
+capabilities, effects and the reusable map kit are now checked alongside scoped controllers.
+Those checks do not replace the deferred independent final review or manual release acceptance. `pnpm review:structure` publishes advisory size/complexity findings alongside coverage;
 see the [engineering standard](engineering-standard.md) for its policy and limits.
 
 ## Browser and deployment limits
@@ -151,9 +158,9 @@ intermittently failed to create a WebGL context. The same failure was reproduced
 Chromium suite. All three browser tests and all three container builds passed in the
 [PR CI run](https://github.com/meyer-pidiache/papershooter/actions/runs/43590008126).
 
-The subsequent `0515405` checkpoint passed all three Chromium tests and all three container builds
-in [CI](https://github.com/meyer-pidiache/papershooter/actions/runs/43719659376), and passed the
-unchanged [Sonar gate](https://github.com/meyer-pidiache/papershooter/actions/runs/43719659403).
+The subsequent `58304ad` checkpoint passed all three Chromium tests and all three container builds
+in [CI](https://github.com/meyer-pidiache/papershooter/actions/runs/43734932836), and passed the
+unchanged [Sonar gate](https://github.com/meyer-pidiache/papershooter/actions/runs/43734932860).
 Later workflow runs remain authoritative for subsequent commits.
 
 All Docker targets are built as review images. The Node review container was run with a read-only

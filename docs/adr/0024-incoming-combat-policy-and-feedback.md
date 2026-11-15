@@ -41,3 +41,6 @@ shot origins/widths/endpoints/presentation with dead/retired/missing actor guard
 remain unchanged after extraction. Node tests exercise actor commands and parry/cut projection,
 including vector immutability. Existing composed two-/three-client tests and map/gameplay references
 remain in force. Automated traces do not establish real GPU/audio/NAT acceptance or performance.
+
+Subsequent [ADR 0027](0027-checked-construction-and-adapter-capabilities.md) implements the entry/runtime
+construction and structural adapter-option work left open at this checkpoint.

@@ -6,7 +6,8 @@
 - [Deployment](deployment.md): static hosting, VPS, Compose and Vercel.
 - [Testing and quality](quality.md): coverage scope, security review and verification results.
 - [Engineering standard](engineering-standard.md): size, complexity, coupling and review policy.
-- [Refactor review](reviews/2026-11-14-refactor.md): prioritized remaining issues and module inventory.
+- [Refactor review](reviews/2026-11-14-refactor.md): original findings, implementation evidence and historical inventory.
+- [Construction checkpoint](reviews/2026-11-15-construction-checkpoint.md): current scope, retained size/complexity debt and deferred independent review.
 - [Refactor work record](refactor.md): sequence and behavioral baseline.
 - [Architecture decision records](adr/README.md): evaluated alternatives and tradeoffs.
 

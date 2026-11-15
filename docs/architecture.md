@@ -45,8 +45,8 @@ run/match/menu transitions; browser controls and screens request those commands.
 and HostMigration coordinate async connection/recovery through scoped transport/session ports.
 Combat policies also have checked scoped services and an explicit composition API; they do not
 register commands on a mutable game context. Participant/level readers belong to runtime. See
-[ADR 0015](adr/0015-combat-capabilities-and-composition.md). Some legacy controllers still receive
-runtime/action bags; an import check does not validate those semantic boundaries. `ApplicationOptions` defines replaceable rendering, input,
+[ADR 0015](adr/0015-combat-capabilities-and-composition.md). Controllers now consume scoped protocols, with checked construction in ADR 0027; import checks
+still cannot prove semantic callback/state ownership on their own. `ApplicationOptions` defines replaceable rendering, input,
 storage, audio and network adapters for embedding and integration tests.
 
 ## State and lifetime
@@ -68,8 +68,8 @@ EnemyManager composes a population registry, queries, actor components, host sim
 playback, replication and ordered damage/death policy through checked capabilities. Actors own
 navigation, perception and archetype behavior; presentation owners consume model/pose/feedback
 ports. Player abilities, weapon mechanics and their views also have independent checked owners,
-including their actor/weapon composition; the application runtime still binds those capabilities
-from JavaScript. Remote targets use independent interpolation, animation, rope and death owners
+including their actor/weapon composition; the checked application runtime binds those capabilities
+from explicit construction state. Remote targets use independent interpolation, animation, rope and death owners
 behind checked scene/resource/pose services; see [ADR 0014](adr/0014-remote-replica-and-presentation.md). See
 [ADR 0010](adr/0010-player-state-ownership.md), [ADR 0011](adr/0011-weapon-mechanics-and-presentation.md)
 and [ADR 0012](adr/0012-enemy-boundaries.md).
@@ -138,6 +138,19 @@ protocols. Emitters retain same-frame child stepping, and instance buffers/scrat
 reused. See [ADR 0009](adr/0009-presentation-ownership.md) for the visible defaults/positional-write
 review exceptions and unchanged composed output/resource evidence.
 
+Application options now accept structural input/HUD/audio/transport capabilities derived from the
+actual consumers. Runtime/application construction is checked TypeScript against the real default
+adapters and scoped controllers. Owned initialization records stay in composition; they are never
+new universal controller parameters. Deferred commands connect before animation starts, and finite
+browser diagnostics preserve their existing construction/registration timing. See
+[ADR 0027](adr/0027-checked-construction-and-adapter-capabilities.md).
+
+The reusable map kit now has checked primitive options, readonly gap inputs, produced level data
+and collision-production capabilities. Its wall-opening calculation is pure and independent of
+scene/world state. New maps import authoring types from the builder, keeping the registry downstream
+of definitions. District/Mexico recipe bodies and their recorded content remain unchanged. See
+[ADR 0028](adr/0028-checked-map-kit-and-stable-recipes.md).
+
 ## Paradigms and patterns
 
 - Pure typed functions describe wave plans, scores, clocks, map lookup and input validation. Random
@@ -155,23 +168,27 @@ review exceptions and unchanged composed output/resource evidence.
 
 TypeScript strict mode covers domain rules, shared contracts, physics/math, registry, network
 configuration/discovery, backend, model recipes, player/weapon components, enemy composition,
+application/runtime construction and adapter capabilities, map kit/geometry intervals, effects,
 session transitions, multiplayer composition/roster/idle/replication/clock/combat feedback, frame composition/policy/interaction/presentation, screen views/navigation/browsing/records, user settings, focus/wave/reward/match/pickup rules and presentation, remote target/combat composition and lobby connection/recovery. Legacy procedural
-maps, transport, runtime composition and several application/presentation adapters remain
+map recipes, transport and several browser/presentation adapters remain
 JavaScript under `allowJs` with `checkJs: false`; those boundaries are **not** fully statically checked. Tests and
 coverage include them. This is an explicit incremental typing decision, not a completed conversion
 of every source file. See [ADR 0003](adr/0003-modular-architecture.md).
 
-## Remaining decomposition
+## Retained implementation scope
 
-Entry/runtime composition and concrete input/HUD/audio/transport option types still need narrower
-checked boundaries. Multiplayer composition now supplies independent checked owners without runtime
-access; its small supply/prop/fall packet adapters remain explicit and require review as they grow. The enemy subsystem now has checked composition and separate behavior,
-simulation, replication and presentation owners. Effect simulation, recipes, pools and projection now have checked capability contracts; some
-map/engine/input content still needs complexity review. File length is a review signal; splitting
-at an arbitrary limit does not establish ownership. A passed coverage/quality gate does not close
-the [manual review](reviews/2026-11-14-refactor.md) or the remaining work under the
-[engineering standard](engineering-standard.md). The independent final review remains deferred
-until the user's explicit confirmation.
+Original controller/runtime and adapter-contract findings are implemented. The enemy, player,
+weapon, session, screen, frame, multiplayer, effect and map-kit boundaries have checked owners and
+assembly. Small supply/prop/fall packet adapters remain explicit in multiplayer composition and
+require review as they grow. Procedural map recipes, navigation, browser input/HUD/renderer,
+committed transport, the sound forwarding facade and shader/re-export content retain JavaScript
+bodies; their consumed contracts and real construction are checked, not those bodies.
+
+The [implementation checkpoint](reviews/2026-11-15-construction-checkpoint.md) records current
+size scopes and remaining complexity/migration debt. File length is a review signal; splitting at
+an arbitrary limit does not establish ownership. Passing checks do not replace independent review
+or real-device/network acceptance. The independent final review remains deferred until the user's
+explicit confirmation.
 
 ## Adding a map
 

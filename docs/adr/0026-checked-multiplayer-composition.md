@@ -55,3 +55,6 @@ NetworkSync retired the transport before HostMigration captured its id. HostMigr
 its election context before retiring the old endpoint; NetworkSync requests recovery without
 clearing that identity. A two-client timeout scenario and Node successor/follower teardown tests
 verify recovery and rejoin metadata. The update still completes its captured frame remainder.
+
+Subsequent [ADR 0027](0027-checked-construction-and-adapter-capabilities.md) implements the entry/runtime
+construction and structural adapter-option work left open at this checkpoint.

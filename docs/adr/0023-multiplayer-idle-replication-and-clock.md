@@ -55,3 +55,6 @@ or superseded by another channel was still dispatched to gameplay handlers. Tran
 checks both session generation and current connection identity before validation/dispatch, just
 as close/error handling already checked identity. Both regressions first failed against the old
 code and pass with the fix; the current connection still delivers valid packets.
+
+Subsequent [ADR 0027](0027-checked-construction-and-adapter-capabilities.md) implements the entry/runtime
+construction and structural adapter-option work left open at this checkpoint.

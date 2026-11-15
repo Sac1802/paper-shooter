@@ -63,3 +63,6 @@ an actor reference mismatch. The implementation resolves these at their owners/b
 blanket `any`, `ts-nocheck` or adapter casts. Application/multiplayer, map, grenade, weapon, focus and
 screen references pass unchanged. No map, physics, movement or effect fixtures were regenerated.
 The independent final review remains deferred at the user's request.
+
+Subsequent [ADR 0028](0028-checked-map-kit-and-stable-recipes.md) checks the reusable map-kit
+implementation and authoring contracts while retaining both procedural recipe bodies unchanged.

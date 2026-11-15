@@ -74,7 +74,8 @@ Keep the existing District and Mexico geometry unchanged during this refactor.
 Record an exception in the review or an ADR with its scope, measured size/complexity, why extraction
 would currently reduce clarity or add risk, the remaining responsibility and the next review trigger.
 Review exceptions again when the module grows, gains another responsibility or requires a new
-consumer. The [refactor review](reviews/2026-11-14-refactor.md) inventories current debt; appearing in
+consumer. The [refactor review](reviews/2026-11-14-refactor.md) records the original findings, and the
+[construction checkpoint](reviews/2026-11-15-construction-checkpoint.md) records current scopes/debt; appearing in
 that inventory does not approve indefinite growth or certify every item as acceptable.
 
 ## Checks and review process

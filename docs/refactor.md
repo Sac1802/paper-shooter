@@ -33,8 +33,9 @@ The original upstream rights/attribution notice remains applicable to inherited 
 - CI checked syntax and Compose; there was no gameplay test suite or coverage report.
 
 Final measurements and limitations belong in [quality.md](quality.md).
-The [manual review](reviews/2026-11-14-refactor.md) records open findings. The passing automated
-gate does not close those findings or complete the remaining gameplay/controller decomposition.
+The [manual review](reviews/2026-11-14-refactor.md) records open findings. Implementation evidence and retained size/complexity/migration scopes are recorded in the
+[construction checkpoint](reviews/2026-11-15-construction-checkpoint.md). Passing automated checks
+do not replace the deferred independent review or manual release acceptance.
 
 ## Completed structural work
 
@@ -78,4 +79,12 @@ gate does not close those findings or complete the remaining gameplay/controller
   inherited-property weapon/kill-label lookups separately from extraction.
 - Checked effect simulation, recipes, surface projection, pooled rendering and facade capabilities;
   retained same-frame emission, random draws, instance output and fragment/resource retirement.
+- Replaced concrete input/HUD/audio/transport option types with consumed capabilities; checked
+  actual runtime/application assembly and owned initialization, without casting entire adapters.
+  Tightened grenade tuples, map identity and gun/blade discriminants while preserving their output.
+- Checked the reusable map kit and extracted pure wall-opening intervals with narrow world/level
+  production contracts; kept both procedural recipe bodies unchanged and authoring types outside
+  registry registration dependencies.
+- Deferred match results until a recovering host has an identity; the reproduced clock regression
+  preserves ranked scoring after endpoint recovery.
 - Added deterministic unit/integration tests, Chromium smoke tests, coverage imports and pinned CI actions.
