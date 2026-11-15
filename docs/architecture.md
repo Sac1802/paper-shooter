@@ -67,7 +67,8 @@ playback, replication and ordered damage/death policy through checked capabiliti
 navigation, perception and archetype behavior; presentation owners consume model/pose/feedback
 ports. Player abilities, weapon mechanics and their views also have independent checked owners,
 including their actor/weapon composition; the application runtime still binds those capabilities
-from JavaScript. See
+from JavaScript. Remote targets use independent interpolation, animation, rope and death owners
+behind checked scene/resource/pose services; see [ADR 0014](adr/0014-remote-replica-and-presentation.md). See
 [ADR 0010](adr/0010-player-state-ownership.md), [ADR 0011](adr/0011-weapon-mechanics-and-presentation.md)
 and [ADR 0012](adr/0012-enemy-boundaries.md).
 
@@ -98,15 +99,15 @@ separate decision and regression baseline.
 
 TypeScript strict mode covers domain rules, shared contracts, physics/math, registry, network
 configuration/discovery, backend, model recipes, player/weapon components, enemy composition,
-session transitions and lobby connection/recovery. Legacy procedural maps/effects, remote-player
-binding, transport, runtime composition and several application/presentation adapters remain
+session transitions, remote target composition and lobby connection/recovery. Legacy procedural
+maps/effects, transport, runtime composition and several application/presentation adapters remain
 JavaScript under `allowJs` with `checkJs: false`; those boundaries are **not** fully statically checked. Tests and
 coverage include them. This is an explicit incremental typing decision, not a completed conversion
 of every source file. See [ADR 0003](adr/0003-modular-architecture.md).
 
 ## Remaining decomposition
 
-Runtime composition, remote-player binding, screen read models,
+Runtime composition, combat/multiplayer message and synchronization binding, screen read models,
 settings, multiplayer message/idle/synchronization policy and match progression still need narrower
 checked boundaries. The enemy subsystem now has checked composition and separate behavior,
 simulation, replication and presentation owners. Extracted effects remain JavaScript, and some

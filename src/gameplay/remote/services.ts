@@ -8,3 +8,8 @@ export interface RemoteServices {
   effects: RemoteDeathEffects;
   localEye(): Vector3 | null;
 }
+
+export interface RemoteDamageTarget {
+  readonly id: string;
+  readonly alive: boolean;
+}

@@ -1,8 +1,11 @@
-// Other people in the match. Each is drawn as a doodle figure in a team colour and eased between
-// the snapshots its owner sends; it also exposes the same surface enemies and weapons expect of a
-// target (body, center, eye, hit spheres, takeDamage) so the rest of the game does not care
-// whether it is shooting at a bot or a friend.
+// Checked remote target/read model. Independent components own interpolation and presentation.
 import * as THREE from 'three';
+import type { RemoteServices, RemoteDamageTarget } from './remote/services.js';
+import type {
+  CharacterAppearance,
+  CharacterPart,
+} from '../presentation/models/character-contracts.js';
+import type { RemoteAnimationRig } from '../presentation/characters/remote-animation.js';
 import { RemoteRagdoll } from '../presentation/characters/remote-ragdoll.js';
 import { RemoteGrapple } from '../presentation/remote-grapple.js';
 import { RemoteInterpolation } from './remote/interpolation.js';
@@ -15,8 +18,8 @@ import {
 } from '../presentation/characters/remote-animation.js';
 
 const _v = new THREE.Vector3();
-const WEAPON_KINDS = ['rifle', 'shotgun', 'sniper', 'blade'];
-const HIT = [
+const WEAPON_KINDS = ['rifle', 'shotgun', 'sniper', 'blade'] as const;
+const HIT: [Exclude<CharacterPart, 'shield'>, number][] = [
   ['head', 0.3],
   ['torso', 0.33],
   ['hips', 0.2],
@@ -32,104 +35,133 @@ const HIT = [
 
 export { encodeLocal } from '../domain/player-snapshots.js';
 
+type RemoteModel = ReturnType<typeof buildHumanoid> & {
+  tagG: THREE.Group;
+  animation: RemoteAnimationRig;
+};
 export class RemotePlayer {
-  /**
-   * @param {import('./remote/services.js').RemoteServices} services
-   * @param {string} id
-   * @param {string} name
-   * @param {number} team
-   * @param {number} ink
-   */
-  constructor(services, id, name, team, ink) {
-    this.services = services;
-    this.id = id;
+  name: string;
+  readonly isLocal = false;
+  alive = true;
+  parryWindow = false;
+  idle = false;
+  idleSince = 0;
+  untouched = false;
+  away = false;
+  hp = 100;
+  maxHp = 100;
+  speed = 0;
+  weaponIndex = 0;
+  readonly body = {
+    pos: new THREE.Vector3(0, -50, 0),
+    vel: new THREE.Vector3(),
+    halfW: 0.35,
+    height: 1.75,
+    onGround: true,
+  };
+  readonly center = new THREE.Vector3();
+  readonly eye = new THREE.Vector3();
+  readonly forward = new THREE.Vector3(0, 0, -1);
+  readonly right = new THREE.Vector3(1, 0, 0);
+  yaw = 0;
+  pitch = 0;
+  crouching = false;
+  sliding = false;
+  blocking = false;
+  aiming = false;
+  firing = false;
+  private readonly animation = new RemoteAnimation();
+  private readonly death: RemoteRagdoll;
+  private readonly animationFrame = remoteAnimationFrame(this.body.vel, this.body.pos);
+  private flashT = 0;
+  deadT = 0;
+  kills = 0;
+  deaths = 0;
+  score = 0;
+  lastSeen = 0;
+  readonly mat: THREE.ShaderMaterial;
+  readonly solid: THREE.ShaderMaterial;
+  private readonly releaseMaterials: () => void;
+  readonly T: CharacterAppearance & { blockRadius: number } = {
+    weapon: 'rifle',
+    scale: 1.0,
+    hat: 'cap',
+    build: { bodyW: 1, headS: 1, limbR: 0.033 },
+    blockRadius: 0,
+  };
+  readonly hit = HIT;
+  readonly hitSpheres = HIT.map(() => new THREE.Vector3());
+  readonly vel = new THREE.Vector3();
+  private readonly deathPose = { center: this.center, position: this.body.pos, velocity: this.vel };
+  private readonly interpolation = new RemoteInterpolation(this.body, this.vel);
+  grappling = false;
+  readonly gPoint = new THREE.Vector3();
+  private readonly ropeView: RemoteGrapple;
+  private model: RemoteModel;
+  root: THREE.Group | null;
+  private corpse = false;
+  onDamage:
+    ((target: RemoteDamageTarget, amount: number, from: THREE.Vector3 | null) => void) | null =
+    null;
+  constructor(
+    private readonly services: RemoteServices,
+    readonly id: string,
+    name: string,
+    readonly team: number,
+    readonly ink: number,
+  ) {
     this.name = name || 'paper';
-    this.team = team;
-    this.ink = ink;
-    this.isLocal = false;
-    this.alive = true;
-    this.parryWindow = false;
-    this.idle = false;
-    this.idleSince = 0;
-    this.untouched = false;
-    this.away = false;
-    this.hp = 100;
-    this.maxHp = 100;
-    this.speed = 0;
-    this.weaponIndex = 0;
-    this.body = {
-      pos: new THREE.Vector3(0, -50, 0),
-      vel: new THREE.Vector3(),
-      halfW: 0.35,
-      height: 1.75,
-      onGround: true,
-    };
-    this.center = new THREE.Vector3();
-    this.eye = new THREE.Vector3();
-    this.forward = new THREE.Vector3(0, 0, -1);
-    this.right = new THREE.Vector3(1, 0, 0);
-    this.yaw = 0;
-    this.pitch = 0;
-    this.crouching = false;
-    this.sliding = false;
-    this.blocking = false;
-    this.aiming = false;
-    this.firing = false;
-    this.animation = new RemoteAnimation();
     this.death = new RemoteRagdoll(services.scene, services.effects);
-    this.animationFrame = remoteAnimationFrame(this.body.vel, this.body.pos);
-    this.flashT = 0;
-    this.deadT = 0;
-    this.kills = 0;
-    this.deaths = 0;
-    this.score = 0;
     this.mat = makeInkMaterial({ ink, shadeScale: 0, shadeBias: 1 });
     this.solid = makeInkMaterial({ ink: INK.BLACK, fill: true, side: THREE.DoubleSide });
     this.releaseMaterials = services.resources.retain([this.mat, this.solid]);
-    this.T = {
-      weapon: 'rifle',
-      scale: 1.0,
-      hat: 'cap',
-      build: { bodyW: 1, headS: 1, limbR: 0.033 },
-      blockRadius: 0,
-    };
-    this.hit = HIT;
-    this.hitSpheres = HIT.map(() => new THREE.Vector3());
-    this.vel = new THREE.Vector3();
-    this.deathPose = { center: this.center, position: this.body.pos, velocity: this.vel };
-    this.interpolation = new RemoteInterpolation(this.body, this.vel);
-    this.grappling = false;
-    this.gPoint = new THREE.Vector3();
-    this._buildModel();
+    this.model = this.buildModel();
+    this.root = this.model.root;
     this.ropeView = new RemoteGrapple(services.scene, services.resources);
-    this.rope = this.ropeView.rope;
-    this.hook = this.ropeView.hook;
   }
-  _buildModel() {
+  get parts() {
+    return this.model.parts;
+  }
+  get J() {
+    return this.model.J;
+  }
+  get face() {
+    return this.model.face;
+  }
+  get tagG() {
+    return this.model.tagG;
+  }
+  get rope() {
+    return this.ropeView.rope;
+  }
+  get hook() {
+    return this.ropeView.hook;
+  }
+  private get animationRig() {
+    return this.model.animation;
+  }
+  private buildModel(): RemoteModel {
     const model = buildHumanoid(this.mat, this.solid, this.T);
-    this.root = model.root;
-    this.parts = model.parts;
-    this.J = model.J;
-    this.face = model.face;
-    this.root.visible = false;
-    this.services.scene.add(this.root);
+    model.root.visible = false;
+    this.services.scene.add(model.root);
     this.weaponIndex = -1;
-    // a name tag: a little flag above the head so you know who is who
-    this.tagG = new THREE.Group();
-    this.root.add(this.tagG);
-    this.tagG.position.y = 2.25;
+    const tagG = new THREE.Group();
+    model.root.add(tagG);
+    tagG.position.y = 2.25;
     const flag = new THREE.Mesh(
       new THREE.BoxGeometry(0.5, 0.28, 0.02),
       makeInkMaterial({ ink: this.ink, fill: true, side: THREE.DoubleSide }),
     );
-    this.tagG.add(flag);
-    this.animationRig = { root: this.root, joints: this.J, tag: this.tagG, face: this.face };
+    tagG.add(flag);
+    const animation = { root: model.root, joints: model.J, tag: tagG, face: model.face };
     this.corpse = false;
-    this.services.resources.track(this.root);
+    this.services.resources.track(model.root);
+    return { ...model, tagG, animation };
   }
+
   // knocked flat with some physics: the whole figure tumbles away as debris (bits come off on a
   // big hit), and a fresh figure is drawn when the player comes back
-  ragdoll(dir, over) {
+  ragdoll(dir: THREE.Vector3 | null = null, over = false) {
     if (this.corpse) return;
     this.corpse = true;
     this.tagG.visible = false;
@@ -144,7 +176,7 @@ export class RemotePlayer {
   get blockRadius() {
     return 0;
   }
-  setWeapon(i) {
+  setWeapon(i: number) {
     if (i === this.weaponIndex && this.J.gun.children.length) return;
     this.weaponIndex = i;
     const gun = this.J.gun;
@@ -158,7 +190,7 @@ export class RemotePlayer {
   get snapB() {
     return this.interpolation.next;
   }
-  push(snap, t) {
+  push(snap: readonly number[] | null, t: number) {
     if (!snap) return;
     const latest = this.interpolation.push(snap, t);
     this.setWeapon(snap[5]);
@@ -184,7 +216,8 @@ export class RemotePlayer {
     this.away = !!(f & 2048);
     if (wasAlive && !this.alive) this.deadT = 0;
     if (this.alive && this.corpse) {
-      this._buildModel();
+      this.model = this.buildModel();
+      this.root = this.model.root;
       this.interpolation.clearPrevious();
       this.body.pos.copy(latest.p);
     }
@@ -195,25 +228,25 @@ export class RemotePlayer {
     if (this.root && this.away) this.root.visible = false;
   }
   // damage dealt to this player by the host's bots or by another player's shot goes to its owner
-  takeDamage(amount, fromPos) {
+  takeDamage(amount: number, fromPos: THREE.Vector3 | null = null) {
     if (this.onDamage) this.onDamage(this, amount, fromPos);
   }
   knockback() {
     /* the owner's client applies its own physics */
   }
-  tryBlockMelee(e) {
+  tryBlockMelee(e: { center: THREE.Vector3 }) {
     if (!this.alive || !this.blocking) return false;
     _v.subVectors(e.center, this.eye).normalize();
     return _v.dot(this.forward) > 0.35;
   }
-  tryDeflect() {
+  tryDeflect(): false {
     return false;
   }
   flash() {
     this.flashT = 0.08;
     setFill(this.mat, true);
   }
-  update(dt, now) {
+  update(dt: number, now: number) {
     if (this.flashT > 0) {
       this.flashT -= dt;
       if (this.flashT <= 0) setFill(this.mat, false);
@@ -248,7 +281,7 @@ export class RemotePlayer {
       this.hitSpheres[i].setFromMatrixPosition(this.parts[HIT[i][0]].matrixWorld);
     this._updateRope();
   }
-  _updateRope() {
+  private _updateRope() {
     this.ropeView.update(
       this.grappling && this.alive && !this.away,
       this.body.pos,
@@ -257,7 +290,7 @@ export class RemotePlayer {
     );
   }
 
-  _animate(dt) {
+  private _animate(dt: number) {
     const frame = this.animationFrame;
     frame.onGround = this.body.onGround;
     frame.alive = this.alive;

@@ -17,5 +17,7 @@
 
 | [0013](0013-session-transition-ownership.md) | Session transition, reset and asynchronous lifetime ownership | Accepted |
 
+| [0014](0014-remote-replica-and-presentation.md) | Remote snapshot, interpolation and presentation ownership | Accepted |
+
 Each decision records context, alternatives, consequences and evidence. Revisit a decision when its
 constraints change; retain superseded records so their reasoning remains available.
