@@ -133,6 +133,11 @@ actor commands. Neither policy nor feedback receives the whole runtime. See
 [ADR 0025](adr/0025-remote-roster-reconciliation.md) and
 [ADR 0026](adr/0026-checked-multiplayer-composition.md), including reviewed composition exceptions.
 
+Effect simulation/recipes/rendering and the facade now use checked scene/resource/raycast/particle
+protocols. Emitters retain same-frame child stepping, and instance buffers/scratch vectors remain
+reused. See [ADR 0009](adr/0009-presentation-ownership.md) for the visible defaults/positional-write
+review exceptions and unchanged composed output/resource evidence.
+
 ## Paradigms and patterns
 
 - Pure typed functions describe wave plans, scores, clocks, map lookup and input validation. Random
@@ -151,7 +156,7 @@ actor commands. Neither policy nor feedback receives the whole runtime. See
 TypeScript strict mode covers domain rules, shared contracts, physics/math, registry, network
 configuration/discovery, backend, model recipes, player/weapon components, enemy composition,
 session transitions, multiplayer composition/roster/idle/replication/clock/combat feedback, frame composition/policy/interaction/presentation, screen views/navigation/browsing/records, user settings, focus/wave/reward/match/pickup rules and presentation, remote target/combat composition and lobby connection/recovery. Legacy procedural
-maps/effects, transport, runtime composition and several application/presentation adapters remain
+maps, transport, runtime composition and several application/presentation adapters remain
 JavaScript under `allowJs` with `checkJs: false`; those boundaries are **not** fully statically checked. Tests and
 coverage include them. This is an explicit incremental typing decision, not a completed conversion
 of every source file. See [ADR 0003](adr/0003-modular-architecture.md).
@@ -161,7 +166,7 @@ of every source file. See [ADR 0003](adr/0003-modular-architecture.md).
 Entry/runtime composition and concrete input/HUD/audio/transport option types still need narrower
 checked boundaries. Multiplayer composition now supplies independent checked owners without runtime
 access; its small supply/prop/fall packet adapters remain explicit and require review as they grow. The enemy subsystem now has checked composition and separate behavior,
-simulation, replication and presentation owners. Extracted effects remain JavaScript, and some
+simulation, replication and presentation owners. Effect simulation, recipes, pools and projection now have checked capability contracts; some
 map/engine/input content still needs complexity review. File length is a review signal; splitting
 at an arbitrary limit does not establish ownership. A passed coverage/quality gate does not close
 the [manual review](reviews/2026-11-14-refactor.md) or the remaining work under the

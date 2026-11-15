@@ -1,8 +1,17 @@
 import * as THREE from 'three';
 import { INK } from '../../shared/ink.js';
 import { rand } from '../../engine/math.js';
+import type { ParticleSink } from './particle-contracts.js';
+interface BlastSurface {
+  bloodPool(point: THREE.Vector3, size: number, ink: number): void;
+}
 const _v = new THREE.Vector3();
-export function boom(particles, decals, pos, radius = 5) {
+export function boom(
+  particles: ParticleSink,
+  decals: BlastSurface,
+  pos: THREE.Vector3,
+  radius = 5,
+) {
   const k = radius / 5;
   // a fat orange fireball: a few huge fills that balloon fast, then a cloud of smaller blobs
   for (let i = 0; i < 4; i++) {
@@ -80,7 +89,13 @@ export function boom(particles, decals, pos, radius = 5) {
   decals.bloodPool(pos, radius * 0.8, INK.BLACK);
   return 0.8;
 }
-export function explosion(particles, decals, pos, radius = 4, ink = INK.BLACK) {
+export function explosion(
+  particles: ParticleSink,
+  decals: BlastSurface,
+  pos: THREE.Vector3,
+  radius = 4,
+  ink = INK.BLACK,
+) {
   for (let i = 0; i < 40; i++) {
     _v.set(rand(-1, 1), rand(-0.2, 1), rand(-1, 1)).normalize().multiplyScalar(rand(4, 14));
     particles.spawn('drop', pos, _v, {

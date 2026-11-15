@@ -1,10 +1,18 @@
 import * as THREE from 'three';
 import { INK } from '../../shared/ink.js';
 import { rand } from '../../engine/math.js';
+import type { ParticleSink, StrokeOptions } from './particle-contracts.js';
 const _v = new THREE.Vector3(),
   _v2 = new THREE.Vector3(),
   _d = new THREE.Vector3();
-export function sparks(particles, point, normal, ink = INK.BLUE, n = 6, speed = 7) {
+export function sparks(
+  particles: ParticleSink,
+  point: THREE.Vector3,
+  normal: THREE.Vector3,
+  ink = INK.BLUE,
+  n = 6,
+  speed = 7,
+) {
   for (let i = 0; i < n; i++) {
     _v.set(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize();
     if (_v.dot(normal) < 0) _v.negate();
@@ -21,7 +29,14 @@ export function sparks(particles, point, normal, ink = INK.BLUE, n = 6, speed = 
     });
   }
 }
-export function strokeBurst(particles, pos, ink, n = 16, speed = 6, opts = {}) {
+export function strokeBurst(
+  particles: ParticleSink,
+  pos: THREE.Vector3,
+  ink: number,
+  n = 16,
+  speed = 6,
+  opts: StrokeOptions = {},
+) {
   for (let i = 0; i < n; i++) {
     _v.set(rand(-1, 1), rand(-1, 1), rand(-1, 1))
       .normalize()
@@ -37,7 +52,14 @@ export function strokeBurst(particles, pos, ink, n = 16, speed = 6, opts = {}) {
     });
   }
 }
-export function tracer(particles, from, to, ink = INK.BLUE, thick = 0.022, life = 0.06) {
+export function tracer(
+  particles: ParticleSink,
+  from: THREE.Vector3,
+  to: THREE.Vector3,
+  ink = INK.BLUE,
+  thick = 0.022,
+  life = 0.06,
+) {
   _d.subVectors(to, from);
   const len = _d.length();
   if (len < 0.05) return;
@@ -53,7 +75,13 @@ export function tracer(particles, from, to, ink = INK.BLUE, thick = 0.022, life 
     shrink: false,
   });
 }
-export function blood(particles, pos, dir, amount = 1, opts = {}) {
+export function blood(
+  particles: ParticleSink,
+  pos: THREE.Vector3,
+  dir: THREE.Vector3,
+  amount = 1,
+  opts: { ink?: number } = {},
+) {
   const ink = opts.ink ?? INK.RED;
   const n = Math.round(14 * amount);
   for (let i = 0; i < n; i++) {
@@ -99,7 +127,7 @@ export function blood(particles, pos, dir, amount = 1, opts = {}) {
     });
   }
 }
-export function drip(particles, pos, amount = 1) {
+export function drip(particles: ParticleSink, pos: THREE.Vector3, amount = 1) {
   particles.spawn('drop', pos, _v.set(rand(-0.3, 0.3), rand(-0.4, 0.2), rand(-0.3, 0.3)), {
     size: rand(0.018, 0.03) + 0.02 * amount,
     life: rand(1, 1.8),
@@ -109,10 +137,22 @@ export function drip(particles, pos, amount = 1) {
     decalSize: 5,
   });
 }
-export function fountain(particles, pos, dir, dur = 0.8, ink = INK.RED) {
+export function fountain(
+  particles: ParticleSink,
+  pos: THREE.Vector3,
+  dir: THREE.Vector3,
+  dur = 0.8,
+  ink = INK.RED,
+) {
   particles.spawn('emitter', pos, dir, { life: dur, ink, rate: 40, size: 0.05 });
 }
-export function shell(particles, pos, vel, ink = INK.ORANGE, size = 0.02) {
+export function shell(
+  particles: ParticleSink,
+  pos: THREE.Vector3,
+  vel: THREE.Vector3,
+  ink = INK.ORANGE,
+  size = 0.02,
+) {
   particles.spawn('stroke', pos, vel, {
     size,
     life: rand(0.9, 1.4),
@@ -125,7 +165,7 @@ export function shell(particles, pos, vel, ink = INK.ORANGE, size = 0.02) {
     drag: 0.5,
   });
 }
-export function smoke(particles, pos, dir, n = 3) {
+export function smoke(particles: ParticleSink, pos: THREE.Vector3, dir: THREE.Vector3, n = 3) {
   for (let i = 0; i < n; i++) {
     _v.copy(dir)
       .multiplyScalar(rand(0.6, 1.8))

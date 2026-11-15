@@ -35,8 +35,14 @@ and a small amount of facade forwarding, but their collaborators and disposal re
 visible. Audio contracts are checked TypeScript. Effect instance pools, splat geometry, surface projection
 and fragment lifetime now also use checked scene/resource/raycast/particle capabilities. The pool
 owns its non-null color attribute and dirty-buffer publication; callers do not assert away the
-nullable library field. Particle simulation, recipes, particle rendering and the effects facade
-remain JavaScript and must not be represented as fully statically checked. The retained seven-argument
+nullable library field. Particle simulation, recipe sinks, particle rendering and the effects facade
+are now also checked TypeScript. Emission, movement/collision and in-place compaction retain their
+order, including stepping appended emitter children in the same frame. Rendering reads particle
+state and delegates drop/stroke projection within its owner, keeping bounded pools and scratch
+vectors. Missing required emitter/stroke vectors produce explicit invariant errors at the same
+use sites that previously failed implicitly; valid states and random draw order are unchanged.
+The canonical spawn normalizer keeps its eighteen nullish defaults together: its complexity warning
+comes from the option schema and remains visible, rather than creating artificial helper stages. The retained seven-argument
 buffer write stays explicit to avoid allocating per-instance parameter objects; its positional
 parameter warning remains visible for review. Existing composed fingerprints and fragment-cap/expiry
 resource regressions pass unchanged.

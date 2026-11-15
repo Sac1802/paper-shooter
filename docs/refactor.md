@@ -76,4 +76,6 @@ gate does not close those findings or complete the remaining gameplay/controller
   combat policy/feedback, idle, replica synchronization and clock owners. Preserved late-join payload
   order and reconnecting score retention. Fixed reproduced retired-channel packet dispatch and
   inherited-property weapon/kill-label lookups separately from extraction.
+- Checked effect simulation, recipes, surface projection, pooled rendering and facade capabilities;
+  retained same-frame emission, random draws, instance output and fragment/resource retirement.
 - Added deterministic unit/integration tests, Chromium smoke tests, coverage imports and pinned CI actions.
