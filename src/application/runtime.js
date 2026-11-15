@@ -4,6 +4,8 @@ import { Input } from '../platform/input.js';
 import { buildLevel } from '../maps/index.js';
 import { NavGrid } from '../engine/navigation.js';
 import { Effects } from '../presentation/effects.js';
+import { Hitscan } from '../gameplay/weapons/hitscan.js';
+import { MeleeImpacts } from '../gameplay/weapons/melee-impacts.js';
 import { EnemyManager } from '../gameplay/enemies.js';
 import { Player } from '../gameplay/player.js';
 import { Net } from '../network/peer-transport.js';
@@ -106,6 +108,41 @@ export function createRuntime(options) {
     hitstop: (duration, scale) => game.hitstop(duration, scale),
     score: (points, label) => game.addScore(points, label),
   }));
+  const enemyWeaponQueries = {
+    raycast: (...args) => enemies.raycast(...args),
+    inArc: (...args) => enemies.inArc(...args),
+    damage: (...args) => enemies.damage(...args),
+  };
+  const playerWeaponQueries = {
+    raycast: (...args) => ctx.raycastPlayers?.(...args) ?? null,
+    inArc: (...args) => ctx.playersInArc?.(...args) ?? [],
+    damage: (...args) => ctx.hitPlayer(...args),
+  };
+  ctx.hitscan = new Hitscan({
+    world,
+    enemies: enemyWeaponQueries,
+    players: playerWeaponQueries,
+    breakableHit: (...args) => {
+      if (!ctx.breakHit) return false;
+      ctx.breakHit(...args);
+      return true;
+    },
+    feedback: {
+      tracer: (...args) => effects.tracer(...args),
+      bulletImpact: (...args) => effects.bulletImpact(...args),
+      ricochet: (...args) => audio.ricochet(...args),
+      shot: (point) => ctx.onShot?.(point),
+    },
+  });
+  ctx.meleeImpacts = new MeleeImpacts({
+    enemies: enemyWeaponQueries,
+    players: playerWeaponQueries,
+    ropes: { cut: (...args) => ctx.cutRopes?.(...args) ?? false },
+    props: {
+      inArc: (...args) => ctx.breakablesInArc?.(...args) ?? [],
+      damage: (...args) => ctx.breakHit(...args),
+    },
+  });
   const player = (ctx.player = new Player(ctx));
   player.name = state.myName;
   const net = options.net ?? new Net();

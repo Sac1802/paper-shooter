@@ -2,7 +2,6 @@ import { MeleeMechanics } from './melee-mechanics.js';
 import { BladeAnimation } from '../../presentation/weapons/blade-animation.js';
 import * as THREE from 'three';
 import { INK } from '../../shared/ink.js';
-import { rand } from '../../engine/math.js';
 import { ViewModel } from '../../presentation/viewmodel.js';
 import { buildKatana } from '../../presentation/models/katana.js';
 const _v = new THREE.Vector3(),
@@ -81,42 +80,11 @@ export class Katana extends ViewModel {
   doHit(st, s) {
     const ctx = this.ctx,
       P = ctx.player;
-    const hits = ctx.enemies.inArc(P.eye, P.forward, 3.0, Math.cos(0.95));
     _v2.copy(P.forward);
     _v.set(-P.forward.z, 0, P.forward.x).multiplyScalar(s * 0.7);
     _v2.add(_v).y -= 0.35;
     _v2.normalize();
-    let any = false;
-    for (const h of hits) {
-      any = true;
-      const point = h.enemy.center.clone();
-      point.y += rand(-0.2, 0.4);
-      ctx.enemies.damage(h.enemy, this.damage, {
-        point,
-        dir: _v2.clone(),
-        part: 'torso',
-        source: 'katana',
-        crit: false,
-        slashDir: s,
-      });
-    }
-    if (ctx.playersInArc)
-      for (const t of ctx.playersInArc(P.eye, P.forward, 3.0, Math.cos(0.95))) {
-        any = true;
-        ctx.hitPlayer(t, 55, {
-          point: t.center.clone(),
-          dir: _v2.clone(),
-          part: 'torso',
-          source: 'katana',
-          crit: false,
-        });
-      }
-    if (ctx.cutRopes && ctx.cutRopes(P.eye, P.forward, 3.4)) any = true;
-    if (ctx.breakablesInArc)
-      for (const br of ctx.breakablesInArc(P.eye, P.forward, 3.2, Math.cos(1.0))) {
-        any = true;
-        ctx.breakHit(br, this.damage, br.pos.clone(), _v2.clone());
-      }
+    const any = ctx.meleeImpacts.strike(P.eye, P.forward, _v2, s, this.damage);
     // a swing only cuts; bullets are turned aside by the raised guard, never by a slash
     if (any) {
       this.ctx.audio.katanaHit();

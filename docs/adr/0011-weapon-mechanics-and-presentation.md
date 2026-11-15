@@ -24,7 +24,12 @@ Use independent, checked owners behind small gameplay adapters:
 - `ShellEjection` consumes an eject point, pose and emit command. It owns scratch vectors and
   does not query the player/controller beyond that pose contract.
 - Nearest-ray precedence and critical/distance damage are deterministic domain rules. The
-  gameplay adapter applies the chosen enemy/player/prop impact and coordinates existing feedback.
+  Hitscan owns enemy/player/world selection, distinct PvP damage, prop precedence and tracer
+  outcomes through checked query/damage/feedback ports. Its muzzle reader runs after damage
+  callbacks, retaining original order; callers reuse that reader rather than allocating it per pellet.
+  MeleeImpacts owns ordered enemy/player/rope/prop interaction and borrowed-input protection.
+  Neither policy receives the weapon, its view or application runtime; composition binds live
+  multiplayer/prop commands. The gameplay adapter retains weapon feedback and presentation.
 
 Keep the existing transform, timer and feedback order. Borrow preallocated pump/swing frames during
 synchronous updates instead of allocating per-frame dependency wrappers. Automatic magazine reload
@@ -48,5 +53,7 @@ Fingerprints captured before extraction record all five weapon geometries, mater
 values and action-cycle transforms through firing, complete reloads, guard, parries and blade
 blood. They remain unchanged. Additional tests cover ammo conservation, reload interruption,
 trigger/cooldown/pump gates, single-hit melee windows, combo/guard timing, hit-distance ties and
-falloff bounds. Timer regressions verify automatic reload both runs when intended and cannot run
+falloff bounds. Isolated impact tests cover PvP/fallback critical damage, wall/prop ties and
+ricochet draws, muzzle/tracer order, bounded miss endpoints and ordered melee vector ownership.
+Timer regressions verify automatic reload both runs when intended and cannot run
 after application disposal. Real-hardware visual/performance acceptance is still a separate check.
