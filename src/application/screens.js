@@ -1,6 +1,4 @@
-import { LEVELS } from '../maps/index.js';
-import { CONTROLS_HTML } from '../presentation/hud.js';
-import { FFA_TARGET } from '../domain/match';
+import * as views from '../presentation/screen-views.js';
 import { escapeHtml as esc } from '../presentation/html';
 
 export function createScreens(runtime, actions = {}) {
@@ -26,13 +24,7 @@ export function createScreens(runtime, actions = {}) {
   const settingsHTML = () => settingsPanel.html();
   const wireSettings = () => settingsPanel.wire(hud.el.panel);
   const wireName = (box) => settingsPanel.wireName(box);
-  function checkpointHTML() {
-    if (runtime.state.checkpoint < 5) return '';
-    let h = '<div class="checkpoints"><span>checkpoints</span>';
-    for (let w = 5; w <= runtime.state.checkpoint; w += 5)
-      h += `<button type="button" data-cp="${w}">WAVE ${w}</button>`;
-    return h + '</div>';
-  }
+  const checkpointHTML = () => views.checkpointHTML(runtime.state.checkpoint);
   function wireCheckpoints(onGo) {
     const box = hud.el.panel.querySelector('.checkpoints');
     if (!box) return;
@@ -42,10 +34,7 @@ export function createScreens(runtime, actions = {}) {
       if (b) onGo(Number(b.dataset.cp));
     });
   }
-  function mapHTML(sel, canPick) {
-    if (LEVELS.length < 2) return '';
-    return `<div class="mapsel" id="mapsel"><span>map</span>${LEVELS.map((m) => `<button type="button" class="mapbtn${m.key === sel ? ' on' : ''}" data-map="${m.key}" ${canPick ? '' : 'disabled'}>${m.name}<i>${m.blurb}</i></button>`).join('')}</div>`;
-  }
+  const mapHTML = (selected, canPick) => views.mapHTML(selected, canPick);
   function wireMap(onPick) {
     const box = hud.el.panel.querySelector('#mapsel');
     if (!box) return;
@@ -56,53 +45,25 @@ export function createScreens(runtime, actions = {}) {
     });
   }
 
-  function mainHTML() {
-    return `<h1>PAPER SHOOTER</h1><h2>a scribbled survival shooter</h2>
-    <div class="mainbtns"><button type="button" class="start" id="soloBtn">START<i>solo · survive the waves</i></button><button type="button" id="onlineBtn">PLAY ONLINE<i>free for all · up to 10 players</i></button></div>
-    ${mapHTML(runtime.state.mapKey, true)}${CONTROLS_HTML}${settingsHTML()}${checkpointHTML()}${runtime.state.best ? `<div class="beststat">best score: ${runtime.state.best}</div>` : ''}`;
-  }
-  function onlineHTML() {
-    return `<h1>PLAY ONLINE</h1><h2>free for all · first to ${FFA_TARGET} · up to 10 players</h2>
-    <div class="online" id="online">
-      <div class="row"><span>your name</span><input type="text" class="namebox" id="setName" maxlength="14" value="${esc(runtime.state.myName)}"></div>
-      <div class="row"><button type="button" class="big" id="quickBtn">QUICK PLAY</button><span class="hint">jumps into an open public lobby, or opens one for you</span></div>
-      <div class="row split"><span>or</span></div>
-      <div class="row"><button type="button" id="createBtn">CREATE LOBBY</button><div class="radio"><label><input type="radio" name="vis" value="public" ${lobby.isPublic ? 'checked' : ''}> public</label><label><input type="radio" name="vis" value="private" ${lobby.isPublic ? '' : 'checked'}> private · friends only</label></div></div>
-      <div class="row"><span>have a code?</span><input type="text" id="codeBox" placeholder="CODE" maxlength="5" autocomplete="off"><button type="button" id="joinBtn">JOIN</button></div>
-      <div class="lobbylist" id="lobbylist"><div class="row"><span>public lobbies</span><button type="button" class="alt" id="refreshBtn">REFRESH</button></div><div class="rows" id="lobbyRows">${lobbyListHTML()}</div></div>
-      <div class="status" id="status">${esc(lobby.status || '')}</div>
-      ${lobby.rejoinCode ? `<div class="row"><button type="button" class="big" id="rejoinBtn">REJOIN ${esc(lobby.rejoinCode)}</button></div>` : ''}
-      <div class="row"><button type="button" class="alt" id="backBtn">BACK</button></div>
-    </div>`;
-  }
-  function lobbyHTML() {
-    const rows = lobbyRows();
-    const host = net.isHost;
-    const n = rows.length;
-    return `<h1>LOBBY</h1><h2>free for all · first to ${FFA_TARGET} · ${n}/${net.maxPlayers} players</h2>
-    <div class="online" id="online">
-      <div class="row"><span>code</span><span class="code">${esc(String(net.isHost ? net.aliasCode || net.code : lobby.shown || net.code || '').replace(/-\d+$/, ''))}</span></div>
-      ${mapHTML(lobby.map || runtime.state.mapKey, host)}
-      <div class="hint">${lobby.isPublic ? 'this lobby is public: anyone can quick play in, or type the code' : 'private lobby: friends type this code under PLAY ONLINE → JOIN'}</div>
-      <div class="plist">${rows.map((p) => `<div class="${p.id === lobby.hostId ? 'host' : ''}${p.id === net.id ? ' me' : ''}"><span>${esc(p.name)}</span><span>${p.id === net.id ? 'you' : ''}</span></div>`).join('')}</div>
-      <div class="row"><button type="button" class="big" id="startBtn">START MATCH</button><button type="button" class="alt" id="leaveBtn">LEAVE</button></div>
-      <div class="status" id="status">${esc(lobby.status || '')}</div><div class="hint">anyone can start · ${n < 2 ? 'people can still join once it is running' : n + ' players in'}</div>
-    </div>`;
-  }
+  const mainHTML = () => views.mainHTML(runtime.state, settingsHTML());
+  const onlineHTML = () =>
+    views.onlineHTML({ myName: runtime.state.myName, ...lobby }, lobbyListHTML());
+  const lobbyHTML = () =>
+    views.lobbyHTML({
+      rows: lobbyRows(),
+      host: net.isHost,
+      localId: net.id,
+      hostId: lobby.hostId,
+      code: net.isHost ? net.aliasCode || net.code : lobby.shown || net.code || '',
+      mapKey: lobby.map || runtime.state.mapKey,
+      maxPlayers: net.maxPlayers,
+      isPublic: lobby.isPublic,
+      status: lobby.status,
+    });
   let lobbyList = null,
     listBusy = false,
     disposed = false;
-  function lobbyListHTML() {
-    if (listBusy) return '<div class="hint">looking…</div>';
-    if (!lobbyList) return '<div class="hint">press refresh to look for open lobbies</div>';
-    if (!lobbyList.length) return '<div class="hint">hit QUICK PLAY to join a lobby</div>';
-    return lobbyList
-      .map(
-        (l) =>
-          `<div class="lobbyrow"><span class="code">${esc(l.code)}</span><span>${esc(l.hostName || 'someone')}'s lobby</span><span>${esc(l.players)}/${esc(l.max)}${l.inMatch ? ' · in a match' : ''}</span>${l.full ? '<span class="status">full</span>' : `<button type="button" data-join="${esc(l.code)}">JOIN</button>`}</div>`,
-      )
-      .join('');
-  }
+  const lobbyListHTML = () => views.lobbyListHTML({ busy: listBusy, rows: lobbyList });
   async function refreshLobbies() {
     if (disposed || listBusy || net.active) return;
     listBusy = true;
@@ -250,30 +211,25 @@ export function createScreens(runtime, actions = {}) {
   function showPause() {
     if (online()) {
       hud.showScreen(
-        `<h1>MENU</h1><h2>free for all · lobby ${esc(String(net.aliasCode || net.code || '').replace(/-\d+$/, ''))}</h2><div class="scoreboard">${sortedScores()
-          .map(
-            ([id, s]) =>
-              `<div class="${id === net.id ? 'me' : ''}"><span>${esc(s.name)}</span><span>${esc(s.kills)} K · ${esc(s.deaths)} D</span></div>`,
-          )
-          .join(
-            '',
-          )}</div>${CONTROLS_HTML}${settingsHTML()}<div class="online" id="online"><div class="row"><button type="button" class="alt" id="leaveBtn">LEAVE MATCH</button></div></div><div class="go">CLICK ANYWHERE (or press ${hud.key('confirm')}) TO KEEP PLAYING</div>`,
+        views.pauseOnlineHTML(
+          {
+            code: String(net.aliasCode || net.code || ''),
+            localId: net.id,
+            scores: sortedScores(),
+          },
+          settingsHTML(),
+          hud.key('confirm'),
+        ),
       );
       wireSettings();
       wireOnline();
       return;
     }
-    hud.showScreen(
-      `<h1>PAUSED</h1><h2>wave ${game.wave} · score ${game.score}</h2>${CONTROLS_HTML}${settingsHTML()}${menuBtnHTML()}<div class="go">CLICK ANYWHERE (or press ${hud.key('confirm')}) TO RESUME</div>`,
-    );
+    hud.showScreen(views.pauseSoloHTML(game, settingsHTML(), hud.key('confirm')));
     wireSettings();
     wireMenuBtn();
   }
-  function showClickToPlay() {
-    hud.showScreen(
-      `<h1>MATCH ON</h1><h2>free for all · first to ${FFA_TARGET}</h2><div class="go">CLICK ANYWHERE (or press ${hud.key('confirm')}) TO PLAY</div>`,
-    );
-  }
+  const showClickToPlay = () => hud.showScreen(views.clickToPlayHTML(hud.key('confirm')));
   function showDead() {
     hud.setGameplayVisible(false);
     const nb = game.score > runtime.state.best;
@@ -282,14 +238,16 @@ export function createScreens(runtime, actions = {}) {
       preferences.write('best', String(runtime.state.best));
     }
     hud.showScreen(
-      `<h1>ERASED</h1><div class="stats">you survived <b>${game.wave}</b> wave${game.wave === 1 ? '' : 's'} · <b>${game.kills}</b> kills · score <b>${game.score}</b>${nb ? ' · <b>NEW BEST</b>' : ` · best ${runtime.state.best}`}</div>${checkpointHTML()}${menuBtnHTML()}<div class="go">CLICK (or press ${hud.key('confirm')}) TO DRAW AGAIN</div>`,
+      views.deathHTML(
+        { ...game, best: runtime.state.best, checkpoint: runtime.state.checkpoint },
+        nb,
+        hud.key('confirm'),
+      ),
     );
     wireCheckpoints((w) => beginAtWave(w));
     wireMenuBtn();
   }
-  function menuBtnHTML() {
-    return '<div class="online menubtn"><div class="row"><button type="button" class="alt" id="menuBtn">MAIN MENU</button></div></div>';
-  }
+  const menuBtnHTML = () => views.menuBtnHTML();
   function wireMenuBtn() {
     const b = hud.el.panel.querySelector('#menuBtn');
     if (b)
