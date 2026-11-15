@@ -17,16 +17,16 @@ Branch coverage is reported separately and still has room to improve in combat, 
 failure paths. Do not describe line coverage as branch coverage or lower Sonar's gate to hide a
 missing report. Sonar's own new-code/condition calculations can differ from the local total.
 
-Local whole-product measurement at `47dd5ed` on 2026-11-15 with the scoped integration deadline
+Local whole-product measurement at `0327ab0` on 2026-11-15 with the scoped integration deadline
 below (later CI/generated reports supersede these snapshot values):
 
 | Metric                      | Result                                                          |
 | --------------------------- | --------------------------------------------------------------- |
-| Unit/integration tests      | 384 passing across 84 files, including architecture regressions |
-| Statements                  | 94.15%                                                          |
-| Lines                       | 95.36%                                                          |
-| Functions                   | 92.81%                                                          |
-| Branches                    | 87.07%                                                          |
+| Unit/integration tests      | 396 passing across 90 files, including architecture regressions |
+| Statements                  | 94.49%                                                          |
+| Lines                       | 95.65%                                                          |
+| Functions                   | 93.58%                                                          |
+| Branches                    | 87.41%                                                          |
 | Production dependency audit | 0 known advisories at the time of inspection                    |
 
 The generated report and latest CI run are authoritative. Test seeds are fixed so procedural
@@ -57,6 +57,12 @@ rerun `pnpm audit --prod` when updating dependencies or preparing a release.
   keyboard, and normalized names across saves/player/transport. DOM tests preserve menu-event
   isolation; the settings owner and preference loading/writing port are checked independently of
   concrete browser storage.
+- An eleven-state pre-extraction screen reference preserves menus/progress, browse states,
+  host/follower lobby, solo/online pause, new/existing best and input prompts. Command tests retain
+  checkpoints, nested map selection, normalized Enter joins, rejoin/Back and host authority. A Node
+  test runs screen navigation/browsing/records against ports without a browser/game runtime;
+  isolated browse tests cover coalescing, fresh names, active sessions, retry and retirement.
+  Two reproduced disposal regressions prevent late lookup success/error from publishing to the UI.
 - Ten pre-extraction enemy archetype traces: geometry, AI/animation/projectiles, random draw order
   and death/resource retirement; isolated target queries, route/formation steering, projectile
   authority/deflection, sniper/burst cycles and presentation lifetime checks. A historical client
@@ -135,9 +141,9 @@ intermittently failed to create a WebGL context. The same failure was reproduced
 Chromium suite. All three browser tests and all three container builds passed in the
 [PR CI run](https://github.com/meyer-pidiache/papershooter/actions/runs/43590008126).
 
-The subsequent `3b97396` checkpoint passed all three Chromium tests and all three container builds
-in [CI](https://github.com/meyer-pidiache/papershooter/actions/runs/43706776385), and passed the
-unchanged [Sonar gate](https://github.com/meyer-pidiache/papershooter/actions/runs/43706776331).
+The subsequent `430e41e` checkpoint passed all three Chromium tests and all three container builds
+in [CI](https://github.com/meyer-pidiache/papershooter/actions/runs/43710504543), and passed the
+unchanged [Sonar gate](https://github.com/meyer-pidiache/papershooter/actions/runs/43710504536).
 Later workflow runs remain authoritative for subsequent commits.
 
 All Docker targets are built as review images. The Node review container was run with a read-only

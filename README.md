@@ -106,7 +106,7 @@ grain, ruled lines and the red margin. Wobble is static so nothing flickers.
 ## Engineering and contributing
 
 The application separates game rules, controllers, map construction, rendering, browser adapters
-and network transports. Physics/math, actor/weapon systems, combat/session policy and settings
+and network transports. Physics/math, actor/weapon systems, combat/session/screen policy and settings
 have strict TypeScript contracts and implementations. Several map/effect/browser modules and
 runtime composition remain JavaScript during the documented incremental migration.
 
