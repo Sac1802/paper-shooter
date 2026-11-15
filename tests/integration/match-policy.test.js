@@ -160,3 +160,18 @@ it('keeps solo death separate from network scoring and defers respawn until fres
   expect(game.state).toBe('play');
   expect(player.alive).toBe(true);
 });
+
+it('keeps the host in the results phase when its death awards the winning kill', () => {
+  const { game, player, scores, hud } = host();
+  scores.get('other').kills = 19;
+  player.lastHitBy = 'other';
+  player.lastHit = { amount: 1000, src: 'rifle' };
+  player.takeDamage(1000, null);
+  expect(scores.get('other').kills).toBe(20);
+  expect(game.over).toEqual({ id: 'other', name: '<opponent>' });
+  expect(game.state).toBe('over');
+  expect(hud.el.panel.textContent).toContain('<opponent> WINS');
+  fixture.frame(0.05, 60);
+  expect(game.state).toBe('over');
+  expect(player.alive).toBe(false);
+});

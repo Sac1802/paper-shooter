@@ -29,6 +29,7 @@ export class SessionController {
   }
   playerDied() {
     const { game } = this.ports;
+    if (game.state === 'over') return;
     if (game.mode === 'ffa') game.respawnT = RESPAWN;
     game.state = 'dying';
     game.deathT = 0;

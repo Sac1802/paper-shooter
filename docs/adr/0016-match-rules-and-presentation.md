@@ -46,3 +46,8 @@ malformed scores, HTML escaping, local rank outside the leaders and host-only wi
 They pass unchanged against the checked controller, alongside application, multiplayer, session
 cancellation, screen and composed-combat regressions. Existing map content, RNG calls and match
 constants remain unchanged. These tests do not establish real-network or GPU performance.
+
+A subsequent regression reproduced the host's winning-death report replacing the results phase
+with `dying`: score handling finished the match before the pending local-death transition. A
+separate correction makes the completed match take precedence over that death transition. Its
+integration test follows actual lethal damage through the winning score and subsequent frames.
