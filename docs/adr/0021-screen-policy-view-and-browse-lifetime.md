@@ -46,7 +46,7 @@ retain shared state and implicit sequencing. A global event bus, router framewor
 would add machinery without defining lifetime, record or host authority. Explicit synchronous
 commands preserve reviewable ordering, and one small browse owner handles the asynchronous boundary.
 
-The composition root is now 332 physical / 327 code lines with a 310-code-line factory. The
+At screen extraction, the composition root has 332 physical / 327 code lines with a 310-code-line factory. The
 temporary exception reviewed in ADRs 0019/0020 still covers construction, capability wiring,
 development commands and disposal. No navigation/record calculations move into that root; inline
 checkpoint persistence moves out. Warnings stay visible. Another controller/consumer/lifecycle

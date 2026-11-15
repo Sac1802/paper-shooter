@@ -1,0 +1,119 @@
+import { FOCUS_SCALE } from '../domain/focus.js';
+import type { GamePhase } from '../domain/match.js';
+import type { LoopPorts } from './loop-contracts.js';
+
+/** Owns variable frame integration and scheduler lifetime, with scoped simulation and view ports. */
+export class GameLoop {
+  private last: number;
+  private musicHealT = 2;
+  private running = false;
+  private frameId = 0;
+  private stopBackground: (() => void) | null = null;
+  constructor(private readonly ports: LoopPorts) {
+    this.last = ports.scheduling.now();
+  }
+  readonly tick = (now: number) => {
+    if (!this.running) return;
+    this.frameId = this.ports.scheduling.request(this.tick);
+    this.step(now);
+  };
+  start() {
+    if (this.running) return;
+    this.running = true;
+    const { scheduling, net } = this.ports;
+    this.last = scheduling.now();
+    this.frameId = scheduling.request(this.tick);
+    this.stopBackground = scheduling.background(() => {
+      if (net.active && scheduling.now() - this.last > 300) this.step(scheduling.now());
+    }, 250);
+  }
+  stop() {
+    this.running = false;
+    this.ports.scheduling.cancel(this.frameId);
+    this.stopBackground?.();
+    this.stopBackground = null;
+  }
+  step(now: number) {
+    const { game, input, online, interaction, presentation, actions } = this.ports;
+    // Preserve the captured phase, variable step and 50 ms cap, including transitions during input.
+    const dt = Math.min(0.05, (now - this.last) / 1000);
+    this.last = now;
+    input.update(dt);
+    const phase = game.state;
+    const playing = phase === 'play' || phase === 'dying';
+    interaction.update(phase, playing, dt);
+    const scale = this.timeScale(dt);
+    if (phase === 'play' && !online()) actions.updateFocus(dt);
+    else actions.endFocus();
+    if (playing) this.simulate(phase, dt, dt * scale);
+    else this.idle(phase, dt);
+    presentation.present(playing, dt, scale);
+  }
+  private timeScale(dt: number) {
+    const { game } = this.ports;
+    if (game.hitstopT > 0) {
+      game.hitstopT -= dt;
+      return game.hitstopScale;
+    }
+    return game.focus.active ? FOCUS_SCALE : 1;
+  }
+  private recoverMusic(phase: GamePhase, dt: number) {
+    this.musicHealT -= dt;
+    if (this.musicHealT > 0) return;
+    this.musicHealT = 2;
+    const { audio, musicWanted, audioReady, input } = this.ports;
+    if (musicWanted() && phase === 'play' && !audio.musicPlaying && audioReady())
+      audio.musicOn(true);
+    if (input.anyInput) audio.resume();
+  }
+  private enforceBounds() {
+    const bounds = this.ports.bounds();
+    const point = this.ports.player.body.pos;
+    if (
+      point.x < bounds.minX - 8 ||
+      point.x > bounds.maxX + 8 ||
+      point.z < bounds.minZ - 8 ||
+      point.z > bounds.maxZ + 8 ||
+      point.y > 150
+    )
+      point.y = -100;
+  }
+  private combo(dt: number) {
+    const { game, hud } = this.ports;
+    if (game.comboT <= 0) return;
+    game.comboT -= dt;
+    if (game.comboT <= 0) {
+      game.combo = 0;
+      hud.setScore(game.score, 0);
+    }
+  }
+  private simulate(phase: GamePhase, dt: number, scaled: number) {
+    const { game, player, enemies, effects, actions, online } = this.ports;
+    game.time += scaled;
+    if (player.shieldT > 0) player.shieldT -= dt;
+    this.recoverMusic(phase, dt);
+    this.enforceBounds();
+    player.update(scaled);
+    enemies.update(scaled);
+    effects.update(scaled);
+    actions.updatePickups(scaled);
+    actions.netUpdate(dt);
+    if (phase === 'play' && !online()) actions.updateWaves(scaled);
+    if (online()) actions.updateArenaPickups(dt);
+    this.combo(scaled);
+    actions.updateDeath(phase, dt);
+  }
+  private idle(phase: GamePhase, dt: number) {
+    const { game, player, effects, net, actions } = this.ports;
+    game.time += dt;
+    if (['start', 'dead', 'lobby', 'over'].includes(phase)) player.idleCam(game.time);
+    effects.update(dt);
+    if (net.active) actions.netUpdate(dt);
+    if (phase !== 'over') return;
+    game.overT += dt;
+    if (net.isHost && game.overT > 8) {
+      net.send('backtolobby', {});
+      actions.toLobbyScreen();
+    } else if (!net.isHost && game.overT > 15) actions.toLobbyScreen();
+  }
+}

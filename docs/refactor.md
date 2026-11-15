@@ -69,4 +69,7 @@ gate does not close those findings or complete the remaining gameplay/controller
 - Replaced screen runtime access with checked navigation/read models, pure views, DOM intent
   binding, browse lifetime/cache and persisted record owners; fixed late lookup publication on
   disposal separately and preserved the eleven-state screen reference.
+- Replaced loop runtime access with checked frame composition, integration, interaction,
+  presentation and cancellable scheduling; preserved captured phases, real/scaled clocks and
+  a single animation chain under background stepping.
 - Added deterministic unit/integration tests, Chromium smoke tests, coverage imports and pinned CI actions.

@@ -23,6 +23,7 @@
 | [0019](0019-focus-policy-motion-and-marker.md)         | Focus policy, dash motion, marker projection and composition review  | Accepted |
 | [0020](0020-user-settings-and-preference-port.md)      | User preference edits, DOM commands and structural persistence       | Accepted |
 | [0021](0021-screen-policy-view-and-browse-lifetime.md) | Screen policy, pure views, DOM commands, records and browse lifetime | Accepted |
+| [0022](0022-frame-policy-projection-and-scheduling.md) | Frame policy, interaction, presentation and cancellable scheduling   | Accepted |
 
 Each decision records context, alternatives, consequences and evidence. Revisit a decision when its
 constraints change; retain superseded records so their reasoning remains available.

@@ -1,5 +1,5 @@
 import type { GamePhase } from '../domain/match.js';
-interface InteractionPorts {
+export interface InteractionPorts {
   input: {
     readonly usingGamepad: boolean;
     readonly pointerLocked: boolean;
@@ -34,12 +34,7 @@ export class FrameInteraction {
   private menuInput(phase: GamePhase) {
     const { input, online, menuOpen, screenClick, resume, pause } = this.ports;
     if (['start', 'pause', 'dead', 'over'].includes(phase)) {
-      if (
-        input.pressed('jump') ||
-        input.pressed('confirm') ||
-        (phase === 'pause' && input.pressed('pause'))
-      )
-        screenClick();
+      if (this.confirmed(phase)) screenClick();
       return;
     }
     if ((phase === 'play' || (phase === 'dying' && online())) && input.pressed('pause')) {
@@ -56,6 +51,14 @@ export class FrameInteraction {
       (input.pressed('jump') || input.pressed('confirm'))
     )
       resume();
+  }
+  private confirmed(phase: GamePhase) {
+    const { input } = this.ports;
+    return (
+      input.pressed('jump') ||
+      input.pressed('confirm') ||
+      (phase === 'pause' && input.pressed('pause'))
+    );
   }
   private board(playing: boolean) {
     const { input, online, menuOpen, boardVisible, boardHTML, hud } = this.ports;

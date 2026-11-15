@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { Vector3 } from 'three';
-import { createLoop } from '../../src/application/loop.js';
+import { createLoop } from '../../src/application/frame-composition.js';
 
 afterEach(() => {
   vi.clearAllTimers();
@@ -131,7 +131,31 @@ function fixture() {
     updateDeath: event('death'),
     toLobbyScreen: event('lobby'),
   };
-  const loop = createLoop(runtime, actions);
+  const loop = createLoop(
+    {
+      game,
+      player,
+      input,
+      hud,
+      audio: runtime.audio,
+      renderer: runtime.R,
+      enemies: runtime.enemies,
+      effects: runtime.effects,
+      net: runtime.net,
+      online: runtime.online,
+      level: () => state.level,
+      musicWanted: () => state.musicWanted,
+      audioReady: () => !!runtime.audio.ctx,
+      remoteCount: () => runtime.remote.size,
+      clearBoss: () => {
+        game.boss = null;
+      },
+      toggleMusic: () => runtime.userSettings.toggleMusic(),
+      boardVisible: () => !hud.el.board.hidden,
+      screenClick: () => hud.onScreenClick(),
+    },
+    actions,
+  );
   return { runtime, game, player, input, hud, actions, events, loop, start: performance.now() };
 }
 it('caps time at 50 ms and preserves simulation, network and presentation phase order', () => {

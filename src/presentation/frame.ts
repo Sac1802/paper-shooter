@@ -17,7 +17,7 @@ type PresentedWeapon = WeaponDisplay &
         readonly reloading: boolean;
       }
   );
-interface FrameDisplayPorts {
+export interface FrameDisplayPorts {
   game: {
     readonly time: number;
     readonly queue: readonly unknown[];

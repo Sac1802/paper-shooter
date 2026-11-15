@@ -14,7 +14,7 @@ import { ScreenController } from './screens.js';
 import { BrowserScreens } from '../presentation/screen-bindings.js';
 import { createMultiplayer } from './multiplayer.js';
 import { createControls } from './controls.js';
-import { createLoop } from './loop.js';
+import { createLoop } from './frame-composition.js';
 
 // Callbacks connect controllers explicitly; factories register callbacks but do not start the loop.
 /** @param {import('./contracts.js').ApplicationOptions} options */
@@ -272,19 +272,43 @@ export function createApplication(options) {
     leaveOnline: (...args) => multiplayer.leaveOnline(...args),
     hostStart: () => session.hostStart(),
   });
-  const loop = createLoop(runtime, {
-    resume: (...args) => session.resume(...args),
-    pause: (...args) => session.pause(...args),
-    boardHTML: (...args) => match.boardHTML(...args),
-    updateFocus: (...args) => focus.updateFocus(...args),
-    endFocus: (...args) => focus.endFocus(...args),
-    updatePickups: (...args) => pickups.updatePickups(...args),
-    netUpdate: (...args) => multiplayer.netUpdate(...args),
-    updateWaves: (...args) => waves.updateWaves(...args),
-    updateArenaPickups: (...args) => pickups.updateArenaPickups(...args),
-    updateDeath: (phase, dt) => session.updateDeath(phase, dt),
-    toLobbyScreen: (...args) => session.toLobbyScreen(...args),
-  });
+  const loop = createLoop(
+    {
+      game: runtime.game,
+      player: runtime.player,
+      input: runtime.input,
+      hud: runtime.hud,
+      audio,
+      renderer: runtime.R,
+      enemies: runtime.enemies,
+      effects: runtime.effects,
+      net: runtime.net,
+      online: runtime.online,
+      level: () => runtime.state.level,
+      musicWanted: () => runtime.state.musicWanted,
+      audioReady: () => !!audio.ctx,
+      remoteCount: () => runtime.remote.size,
+      clearBoss: () => {
+        runtime.game.boss = null;
+      },
+      toggleMusic: () => runtime.userSettings.toggleMusic(),
+      boardVisible: () => !runtime.hud.el.board.hidden,
+      screenClick: () => runtime.hud.onScreenClick(),
+    },
+    {
+      resume: (...args) => session.resume(...args),
+      pause: (...args) => session.pause(...args),
+      boardHTML: (...args) => match.boardHTML(...args),
+      updateFocus: (...args) => focus.updateFocus(...args),
+      endFocus: (...args) => focus.endFocus(...args),
+      updatePickups: (...args) => pickups.updatePickups(...args),
+      netUpdate: (...args) => multiplayer.netUpdate(...args),
+      updateWaves: (...args) => waves.updateWaves(...args),
+      updateArenaPickups: (...args) => pickups.updateArenaPickups(...args),
+      updateDeath: (phase, dt) => session.updateDeath(phase, dt),
+      toLobbyScreen: (...args) => session.toLobbyScreen(...args),
+    },
+  );
 
   runtime.game.onPlayerDeath = () => {
     focus.endFocus();
