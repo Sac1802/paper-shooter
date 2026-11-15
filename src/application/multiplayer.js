@@ -8,6 +8,7 @@ import { IdlePlayers } from './idle-players.js';
 import { MatchClock } from './match-clock.js';
 import { NetworkSync } from './network-sync.js';
 import { CombatMessages } from './combat-messages.js';
+import { RemoteRoster } from './remote-roster.js';
 import { NetworkCombatFeedback } from '../presentation/network-combat-feedback.js';
 
 export function createMultiplayer(runtime, actions = {}) {
@@ -83,12 +84,24 @@ export function createMultiplayer(runtime, actions = {}) {
     tally: tallyDeath,
   });
 
-  function addRemote(id, name) {
-    if (remote.has(id)) {
-      const r = remote.get(id);
-      r.name = name;
-      return r;
-    }
+  const roster = new RemoteRoster({
+    peers: remote,
+    lobby,
+    scores,
+    transport: net,
+    createPeer: makeRemote,
+    map: () => runtime.state.mapKey,
+    phase: () => game.state,
+    inMatch,
+    brokenIds: () =>
+      runtime.state.level.breakables.filter((prop) => !prop.alive).map((prop) => prop.id),
+    farthestSpawnIndex,
+    render: renderLobby,
+    sendScores,
+    refreshScores: refreshScoreHud,
+    feed: (text) => hud.kill(text, 0),
+  });
+  function makeRemote(id, name) {
     const rp = new RemotePlayer(remoteServices, id, name, 0, INK.RED);
     rp.onDamage = (t, amount, fromPos) => {
       if (!runtime.combat.canHurt(t) || !t.alive) return;
@@ -100,100 +113,31 @@ export function createMultiplayer(runtime, actions = {}) {
         src: 'grenade',
       });
     };
-    remote.set(id, rp);
     return rp;
   }
+  function addRemote(id, name) {
+    return roster.add(id, name);
+  }
   function removeRemote(id) {
-    const r = remote.get(id);
-    if (r) {
-      r.dispose();
-      remote.delete(id);
-    }
-    lobby.players.delete(id);
-    scores.delete(id);
+    roster.remove(id);
   }
   function lobbyRows() {
-    return [...lobby.players.entries()].map(([id, p]) => ({ id, name: p.name }));
+    return roster.rows();
   }
   function broadcastLobby() {
-    net.send('lobby', {
-      players: lobbyRows(),
-      hostId: net.id,
-      isPublic: lobby.isPublic,
-      map: lobby.map || runtime.state.mapKey,
-      shown: net.aliasCode || net.code,
-    });
-    renderLobby();
+    roster.broadcast();
   }
 
-  net.onPeerLeave = (id) => {
-    const nm = (lobby.players.get(id) || {}).name;
-    removeRemote(id);
-    broadcastLobby();
-    if (inMatch()) {
-      hud.kill((nm || 'someone') + ' left', 0);
-      sendScores();
-    }
-  };
+  net.onPeerLeave = (id) => roster.peerLeave(id);
   net.onDisconnect = () => {
     if (lobby.order && lobby.order.some((id) => id !== lobby.hostId)) void migrateHost();
     else leaveOnline('the host left the lobby');
   };
   net.on('refused', (d) => leaveOnline(d.reason));
   net.hostName = runtime.state.myName;
-  net.onPeerJoin = (from, meta) => {
-    const name = typeof meta?.name === 'string' ? meta.name.slice(0, 14) : 'paper';
-    if (meta && meta.prev && meta.prev !== from) {
-      const sc = scores.get(meta.prev);
-      if (sc) {
-        scores.delete(meta.prev);
-        scores.set(from, sc);
-      }
-      const r = remote.get(meta.prev);
-      if (r) r.dispose();
-      remote.delete(meta.prev);
-      lobby.players.delete(meta.prev);
-      if (lobby.order) lobby.order = lobby.order.filter((id) => id !== meta.prev);
-    }
-    lobby.players.set(from, { name });
-    addRemote(from, name);
-    broadcastLobby();
-    if (game.state === 'play' || game.state === 'dying') {
-      if (!scores.has(from)) scores.set(from, { name, kills: 0, deaths: 0 });
-      net.sendTo(from, 'start', {
-        late: true,
-        spawn: farthestSpawnIndex(),
-        map: lobby.map || runtime.state.mapKey,
-        broken: runtime.state.level.breakables.filter((b) => !b.alive).map((b) => b.id),
-      });
-      sendScores();
-      hud.kill(name + ' joined', 0);
-    }
-  };
-  net.onHost('lobby', (d) => {
-    lobby.hostId = d.hostId;
-    lobby.isPublic = !!d.isPublic;
-    lobby.code = net.code;
-    lobby.shown = d.shown || net.code;
-    if (d.map) lobby.map = knownMap(d.map);
-    lobby.order = d.players.map((p) => p.id);
-    lobby.players.clear();
-    for (const p of d.players) lobby.players.set(p.id, { name: p.name });
-    for (const p of d.players) if (p.id !== net.id) addRemote(p.id, p.name);
-    for (const id of [...remote.keys()]) if (!lobby.players.has(id)) removeRemote(id);
-    if (inMatch()) {
-      for (const p of d.players)
-        if (!scores.has(p.id)) scores.set(p.id, { name: p.name, kills: 0, deaths: 0 });
-      refreshScoreHud();
-    }
-    renderLobby();
-  });
-  net.onHost('leave', (d) => {
-    const nm = (lobby.players.get(d.id) || {}).name;
-    removeRemote(d.id);
-    if (inMatch()) hud.kill((nm || 'someone') + ' left', 0);
-    renderLobby();
-  });
+  net.onPeerJoin = (id, metadata) => roster.join(id, metadata);
+  net.onHost('lobby', (data) => roster.receive(data));
+  net.onHost('leave', (data) => roster.leave(data.id));
   net.onHost('start', (d) => {
     if (net.isHost) return;
     if (d.map) lobby.map = knownMap(d.map);
