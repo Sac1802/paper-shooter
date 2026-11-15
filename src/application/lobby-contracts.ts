@@ -54,7 +54,7 @@ export interface HostMigrationPorts extends Pick<
 > {
   transport: Pick<
     LobbyTransport,
-    'id' | 'code' | 'accepting' | 'onAlias' | 'host' | 'join' | 'claimAlias'
+    'id' | 'code' | 'accepting' | 'onAlias' | 'host' | 'join' | 'claimAlias' | 'leave'
   >;
   local: Pick<LobbyConnectionPorts['local'], 'myName'>;
   session: Pick<

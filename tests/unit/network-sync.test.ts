@@ -108,28 +108,28 @@ it('retires a silent guest in order, tolerates a closed channel and suppresses s
   ]);
   expect(transport.conns.size).toBe(0);
 });
-it('requests host recovery once and retains the captured update remainder after synchronous leave', () => {
+it('requests host recovery once and retains the captured update remainder after recovery retires the transport', () => {
   const { owner, ports, peers, transport, events } = fixture();
   const peer = peers.get('guest');
   if (!peer) throw new Error('missing guest');
   peer.lastSeen = 1;
   transport.isHost = false;
   transport.hostId = 'guest';
-  transport.leave.mockImplementation(() => {
+  ports.migrate = vi.fn(async () => {
     transport.active = false;
-    events.push(['leave']);
+    events.push(['migrate']);
   });
   ports.shotQueue.push(1, 2, 3);
   owner.update(0.1);
   expect(events).toEqual([
     ['idle', 0.1],
     ['replica', 0.1, 10.001],
-    ['leave'],
     ['migrate'],
     ['broadcast', 'shots', { k: 'rifle', e: [1, 2, 3] }],
     ['clock', 0.1],
   ]);
   expect(ports.remove).not.toHaveBeenCalled();
+  expect(transport.leave).not.toHaveBeenCalled();
   owner.update(0.1);
   expect(ports.migrate).toHaveBeenCalledOnce();
   expect(events.at(-1)).toEqual(['idle', 0.1]);

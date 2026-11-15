@@ -12,7 +12,6 @@ export interface NetworkSyncPorts {
     readonly isHost: boolean;
     readonly hostId: string | null;
     readonly conns: Map<string, { close(): void }>;
-    leave(): void;
     send<K extends 'ps' | 'leave'>(kind: K, data: GamePayloads[K], relay?: boolean): void;
     broadcast(kind: 'shots', data: GamePayloads['shots']): void;
   };
@@ -67,7 +66,6 @@ export class NetworkSync {
     for (const [id, opponent] of opponents()) {
       if (!opponent.lastSeen || now() - opponent.lastSeen <= 9000) continue;
       if (!transport.isHost && id === transport.hostId) {
-        transport.leave();
         void migrate();
         break;
       }

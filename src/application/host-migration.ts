@@ -39,6 +39,8 @@ export class HostMigration {
       return;
     }
     const migration = { myId, roster, base, code, wasInMatch: inMatch() };
+    // Capture identity/roster/clock authority before retiring the old endpoint clears its ids.
+    transport.leave();
     if (oldHost) removeRemote(oldHost);
     const successor = roster[0] === myId;
     presentation.message(

@@ -124,3 +124,30 @@ describe('host recovery policy', () => {
     expect(f.transport.host).not.toHaveBeenCalled();
   });
 });
+it('captures successor identity and score before retiring an endpoint that clears its ids', async () => {
+  const f = fixture();
+  f.transport.leave.mockImplementation(() => {
+    f.transport.id = null;
+    f.transport.code = '';
+  });
+  await f.migration.run();
+  expect(f.transport.leave).toHaveBeenCalledOnce();
+  expect(f.transport.host).toHaveBeenCalledWith({ isPublic: true, code: 'ABCDE-1' });
+  expect(f.ports.scores.get('new-host')).toEqual({ name: 'mine', kills: 7, deaths: 2 });
+  expect(f.ports.session.recoverHost).toHaveBeenCalledWith(true);
+});
+it('retires a follower endpoint before backoff while retaining its previous identity for rejoin', async () => {
+  vi.useFakeTimers();
+  const f = fixture(false);
+  f.transport.leave.mockImplementation(() => {
+    f.transport.id = null;
+    f.transport.code = '';
+  });
+  const running = f.migration.run();
+  expect(f.transport.leave).toHaveBeenCalledOnce();
+  expect(f.transport.join).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1200);
+  await running;
+  expect(f.transport.join).toHaveBeenCalledWith('ABCDE-1', { name: 'mine', prev: 'me' });
+  expect(f.ports.session.recoverFollower).toHaveBeenCalledWith(true);
+});
