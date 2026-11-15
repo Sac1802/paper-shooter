@@ -1,0 +1,78 @@
+// @vitest-environment jsdom
+import { afterEach, expect, it, vi } from 'vitest';
+import { applicationFixture } from '../support/application.js';
+
+let fixture;
+afterEach(() => {
+  fixture?.app.dispose();
+  fixture = null;
+  vi.clearAllTimers();
+  vi.useRealTimers();
+});
+it('applies persisted look settings to mouse and both controller axes through the controls panel', () => {
+  fixture = applicationFixture();
+  const { input, state, values } = fixture;
+  expect(input.mouseSens).toBeCloseTo(0.0022);
+  const sensitivity = document.querySelector('#setSens');
+  sensitivity.value = '250';
+  sensitivity.dispatchEvent(new Event('input'));
+  expect(state.settings.sens).toBe(250);
+  expect(input.mouseSens).toBeCloseTo(0.0055);
+  expect(input.padSensX).toBeCloseTo(8.5);
+  expect(input.padSensY).toBeCloseTo(6.5);
+  expect(document.querySelector('#setSensV').textContent).toBe('250%');
+  expect(values.get('paper_sens')).toBe('250');
+  const invert = document.querySelector('#setInv');
+  invert.checked = true;
+  invert.dispatchEvent(new Event('change'));
+  expect(input.invertY).toBe(true);
+  expect(state.settings.invert).toBe(true);
+  expect(values.get('paper_invert')).toBe('1');
+  sensitivity.value = '25';
+  sensitivity.dispatchEvent(new Event('input'));
+  expect(input.mouseSens).toBeCloseTo(0.00055);
+});
+it('keeps checkbox, keyboard music commands, persistence and newly rendered panels consistent', () => {
+  vi.useFakeTimers();
+  fixture = applicationFixture();
+  const { audio, app, input, state, values, frame, game } = fixture;
+  const music = vi.spyOn(audio, 'musicOn');
+  const checkbox = document.querySelector('#setMus');
+  checkbox.checked = true;
+  checkbox.dispatchEvent(new Event('change'));
+  expect(state.musicWanted).toBe(true);
+  expect(values.get('paper_music')).toBe('1');
+  expect(music).toHaveBeenLastCalledWith(true);
+  input.keys.music = true;
+  frame(0.05);
+  expect(state.musicWanted).toBe(false);
+  expect(values.get('paper_music')).toBe('0');
+  expect(music).toHaveBeenLastCalledWith(false);
+  input.keys.music = false;
+  frame(0.05);
+  input.keys.music = true;
+  frame(0.05);
+  expect(state.musicWanted).toBe(true);
+  game.state = 'play';
+  app.session.pause();
+  expect(document.querySelector('#setMus').checked).toBe(true);
+});
+it('normalizes name edits, retains the previous name on blank input and synchronizes both actor identities', () => {
+  fixture = applicationFixture();
+  const { net, state, player, values } = fixture;
+  vi.spyOn(net, 'listLobbies').mockResolvedValue([]);
+  document.querySelector('#onlineBtn').click();
+  const name = document.querySelector('#setName');
+  name.value = '   abcdefghijklmnopqrstuvwxyz   ';
+  name.dispatchEvent(new Event('input'));
+  expect(state.myName).toBe('abcdefghijklmn');
+  expect(values.get('paper_name')).toBe(state.myName);
+  expect(player.name).toBe(state.myName);
+  expect(net.hostName).toBe(state.myName);
+  name.value = '   ';
+  name.dispatchEvent(new Event('input'));
+  expect(state.myName).toBe('abcdefghijklmn');
+  expect(values.get('paper_name')).toBe(state.myName);
+  expect(player.name).toBe(state.myName);
+  expect(net.hostName).toBe(state.myName);
+});
