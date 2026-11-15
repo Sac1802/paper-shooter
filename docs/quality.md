@@ -17,16 +17,16 @@ Branch coverage is reported separately and still has room to improve in combat, 
 failure paths. Do not describe line coverage as branch coverage or lower Sonar's gate to hide a
 missing report. Sonar's own new-code/condition calculations can differ from the local total.
 
-Local whole-product measurement at `83cd381` on 2026-11-15 with the scoped integration deadline
+Local whole-product measurement at `f799d3a` on 2026-11-15 with the scoped integration deadline
 below (later CI/generated reports supersede these snapshot values):
 
 | Metric                      | Result                                                          |
 | --------------------------- | --------------------------------------------------------------- |
-| Unit/integration tests      | 321 passing across 64 files, including architecture regressions |
-| Statements                  | 91.77%                                                          |
-| Lines                       | 93.26%                                                          |
-| Functions                   | 91.08%                                                          |
-| Branches                    | 83.03%                                                          |
+| Unit/integration tests      | 351 passing across 75 files, including architecture regressions |
+| Statements                  | 93.05%                                                          |
+| Lines                       | 94.43%                                                          |
+| Functions                   | 91.56%                                                          |
+| Branches                    | 85.23%                                                          |
 | Production dependency audit | 0 known advisories at the time of inspection                    |
 
 The generated report and latest CI run are authoritative. Test seeds are fixed so procedural
@@ -109,9 +109,10 @@ signing secret and expiring credentials; it is not used to store passwords. Keep
 attribution and the scoped license notice intact.
 
 The subsequent [manual refactor review](reviews/2026-11-14-refactor.md) identifies remaining
-remaining controller/composition and presentation work, alongside the implemented enemy owners and resolved payload/resource findings.
-These green checks do not prove the complete architectural review finished. `pnpm review:structure` publishes advisory size/complexity findings alongside
-coverage; see the [engineering standard](engineering-standard.md) for its policy and limits.
+controller/composition and presentation work, alongside the implemented enemy owners and resolved
+payload/resource findings. These green checks do not prove the complete architectural review
+finished. `pnpm review:structure` publishes advisory size/complexity findings alongside coverage;
+see the [engineering standard](engineering-standard.md) for its policy and limits.
 
 ## Browser and deployment limits
 

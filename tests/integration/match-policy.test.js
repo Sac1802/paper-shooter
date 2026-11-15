@@ -1,0 +1,162 @@
+// @vitest-environment jsdom
+import { afterEach, expect, it, vi } from 'vitest';
+import { Vector3 } from 'three';
+import { applicationFixture } from '../support/application.js';
+
+let fixture;
+afterEach(() => {
+  fixture?.app.dispose();
+  fixture = null;
+  vi.clearAllTimers();
+  vi.useRealTimers();
+});
+function host() {
+  vi.useFakeTimers();
+  fixture = applicationFixture();
+  const { net, lobby, app } = fixture;
+  net.id = 'local';
+  net.isHost = true;
+  net.connected = true;
+  net.peer = { destroy() {} };
+  lobby.players.set('local', { name: 'player' });
+  lobby.players.set('other', { name: '<opponent>' });
+  app.session.startMatch(false, 0);
+  return fixture;
+}
+
+it('selects among the safest three visible-opponent spawns and includes the local player for late joins', () => {
+  const { app, state, player } = host();
+  const spots = [0, 10, 20, 30].map((x) => new Vector3(x, 0, 0));
+  state.level.arenaSpawns = spots;
+  const opponent = app.multiplayer.addRemote('other', 'paper');
+  opponent.body.pos.set(0, 0, 0);
+  opponent.root.visible = true;
+  const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+  const chosen = app.match.arenaSpawn();
+  expect(chosen).toEqual(spots[3]);
+  expect(chosen).not.toBe(spots[3]);
+  random.mockReturnValue(0.999);
+  expect(app.match.arenaSpawn()).toEqual(spots[1]);
+  player.body.pos.set(30, 0, 0);
+  expect(app.match.farthestSpawnIndex()).toBe(1);
+  opponent.root.visible = false;
+  random.mockReturnValue(0);
+  expect(app.match.arenaSpawn()).toEqual(spots[0]);
+  expect(app.match.farthestSpawnIndex()).toBe(1);
+  state.level.arenaSpawns = [];
+  expect(app.match.spawnSpots()).toBe(state.level.spawns);
+});
+
+it('reports death before scoring and preserves headshot, suicide and respawn feedback', () => {
+  const { app, player, game, net, scores, hud } = host();
+  const events = [];
+  vi.spyOn(net, 'broadcast').mockImplementation((...args) => events.push(['broadcast', ...args]));
+  vi.spyOn(net, 'send').mockImplementation((...args) => events.push(['send', ...args]));
+  const kill = vi.spyOn(hud, 'kill');
+  player.lastHitBy = 'other';
+  player.center.set(1, 2, 3);
+  player.lastHit = { from: [1, 2, 4], amount: 25, crit: true, src: 'rifle' };
+  app.match.onLocalDeath();
+  expect(events.map(([kind, type]) => [kind, type])).toEqual([
+    ['broadcast', 'pdead'],
+    ['send', 'score'],
+  ]);
+  expect(events[0][2]).toEqual({
+    killer: 'other',
+    dir: [0, 0, -1],
+    over: true,
+    how: 'rifle',
+    crit: true,
+  });
+  expect(scores.get('local').deaths).toBe(1);
+  expect(scores.get('other').kills).toBe(1);
+  expect(kill).toHaveBeenLastCalledWith('erased by <opponent> · rifle headshot', 0);
+  expect(game).toMatchObject({ state: 'dying', deathT: 0, respawnT: 2.5 });
+  app.match.respawnLocal();
+  expect(game.state).toBe('play');
+  expect(player).toMatchObject({
+    alive: true,
+    name: 'player',
+    lastHitBy: null,
+    lastHit: null,
+    shieldT: 2,
+  });
+  player.lastHitBy = 'local';
+  player.lastHit = { amount: 100, src: 'unknown' };
+  app.match.onLocalDeath();
+  expect(scores.get('local')).toMatchObject({ kills: 0, deaths: 2 });
+  expect(events.at(-2)[2]).toEqual({
+    killer: 'local',
+    dir: null,
+    over: true,
+    how: null,
+    crit: false,
+  });
+});
+
+it('rejects malformed scores, escapes presentation and retains local rank outside the leaders', () => {
+  const { app, net, scores, hud, state, game } = host();
+  const rows = [
+    { id: 'one', name: '<one>', kills: 7, deaths: 1 },
+    { id: 'two', name: 'two', kills: 6, deaths: 3 },
+    { id: 'three', name: 'three', kills: 6, deaths: 2 },
+    { id: 'local', name: '<local>', kills: 4, deaths: 1 },
+    { id: 'five', name: 'five', kills: 1, deaths: 1 },
+  ];
+  hud.setBoard('open');
+  app.match.applyScores(rows);
+  expect(app.match.sortedScores().map(([id]) => id)).toEqual([
+    'one',
+    'three',
+    'two',
+    'local',
+    'five',
+  ]);
+  expect(hud.el.board.innerHTML).toBe(app.match.boardHTML());
+  expect(hud.el.board.querySelector('one')).toBeNull();
+  const scoreHud = vi.spyOn(hud, 'setPvpScore');
+  app.match.refreshScoreHud();
+  expect(scoreHud.mock.lastCall[0]).toContain('&lt;local&gt; (you)');
+  expect(scoreHud.mock.lastCall[0]).not.toContain('five');
+  app.match.applyScores([{ id: 'bad', name: 'bad', kills: -1, deaths: 0 }]);
+  expect(scores.size).toBe(5);
+  state.matchLeft = 59.1;
+  net.aliasCode = 'ABCDE-2';
+  expect(app.match.boardHTML('<title>')).toContain('&lt;title&gt;');
+  expect(app.match.boardHTML()).toContain('1:00 left · lobby ABCDE');
+  const end = vi.spyOn(net, 'send');
+  scores.get('local').kills = 20;
+  net.isHost = false;
+  app.match.checkWin();
+  expect(game.over).toBeNull();
+  net.isHost = true;
+  app.match.checkWin();
+  expect(end).toHaveBeenLastCalledWith('end', { id: 'local', name: '<local>' });
+  expect(game).toMatchObject({ state: 'over', overT: 0, over: { id: 'local', name: '<local>' } });
+  expect(hud.el.panel.textContent).toContain('YOU WIN');
+  expect(hud.el.board.hidden).toBe(true);
+  end.mockClear();
+  app.match.checkWin();
+  expect(end).not.toHaveBeenCalled();
+});
+
+it('keeps solo death separate from network scoring and defers respawn until fresh input', () => {
+  const { app, game, net, input, player } = host();
+  const broadcast = vi.spyOn(net, 'broadcast');
+  game.mode = 'solo';
+  app.match.onLocalDeath();
+  expect(broadcast).not.toHaveBeenCalled();
+  expect(game).toMatchObject({ state: 'dying', deathT: 0 });
+  game.mode = 'ffa';
+  player.takeDamage(1000, null);
+  game.respawnT = 0.01;
+  fixture.frame(0.05);
+  expect(game.state).toBe('dying');
+  const armed = game.respawnArm;
+  fixture.frame(0.05);
+  expect(game.state).toBe('dying');
+  input.lastActive = armed + 1;
+  fixture.frame(0.05);
+  expect(game.state).toBe('play');
+  expect(player.alive).toBe(true);
+});
