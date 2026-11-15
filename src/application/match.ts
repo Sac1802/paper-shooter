@@ -6,19 +6,19 @@ import type { Winner } from './session-contracts.js';
 import type { MatchPorts } from './match-contracts.js';
 import { matchBoard, matchLeaders, matchResults } from '../presentation/match.js';
 
-const HOW: Readonly<Record<string, string>> = {
-  rifle: 'rifle',
-  shotgun: 'shotgun',
-  sniper: 'sniper',
-  katana: 'katana',
-  grenade: 'grenade',
-  deflect: 'their own bullet',
-};
+const HOW: ReadonlyMap<string, string> = new Map([
+  ['rifle', 'rifle'],
+  ['shotgun', 'shotgun'],
+  ['sniper', 'sniper'],
+  ['katana', 'katana'],
+  ['grenade', 'grenade'],
+  ['deflect', 'their own bullet'],
+]);
 /** Match rules and ordered reports; session owns phases and presentation owns HTML. */
 export class MatchController {
   constructor(private readonly ports: MatchPorts) {}
   howWord(source?: string) {
-    return source ? HOW[source] || null : null;
+    return source ? (HOW.get(source) ?? null) : null;
   }
   spawnSpots() {
     const level = this.ports.level();

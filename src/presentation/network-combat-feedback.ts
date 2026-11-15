@@ -25,11 +25,11 @@ export interface NetworkCombatFeedbackPorts {
   input: { rumble(strong: number, weak: number, duration: number): void };
   hud: { kill(text: string, points: number): void; tip(text: string, duration: number): void };
 }
-const TRACER_THICK: Readonly<Record<string, number>> = {
-  rifle: 0.02,
-  shotgun: 0.014,
-  sniper: 0.03,
-};
+const TRACER_THICK: ReadonlyMap<string, number> = new Map([
+  ['rifle', 0.02],
+  ['shotgun', 0.014],
+  ['sniper', 0.03],
+]);
 /** Projects remote reports into local effects; never applies damage, scores or wire messages. */
 export class NetworkCombatFeedback {
   private readonly muzzle = new Vector3();
@@ -61,7 +61,7 @@ export class NetworkCombatFeedback {
       actor.body.pos.y + 1.35 + actor.forward.y * 0.8,
       actor.body.pos.z + actor.right.z * 0.3 + actor.forward.z * 0.8,
     );
-    const thickness = TRACER_THICK[kind] || 0.02;
+    const thickness = TRACER_THICK.get(kind) ?? 0.02;
     for (let i = 0; i + 2 < endpoints.length; i += 3) {
       this.endpoint.set(endpoints[i], endpoints[i + 1], endpoints[i + 2]);
       effects.tracer(muzzle, this.endpoint, INK.BLUE, thickness, 0.06);
