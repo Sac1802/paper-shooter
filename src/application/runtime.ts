@@ -1,3 +1,20 @@
+import type { ApplicationOptions, RenderingPort } from './contracts.js';
+import type {
+  ApplicationAudio,
+  ApplicationInput,
+  ApplicationHud,
+  ApplicationTransport,
+} from './adapter-ports.js';
+import type { RuntimeState, GameState } from './runtime-state.js';
+import type { CombatActions, CombatOpponent } from './combat-contracts.js';
+import type { Combat } from './combat.js';
+import { EnemyActor } from '../gameplay/enemies/actor.js';
+import type { RemotePlayer } from '../gameplay/remote-player.js';
+import type { Score } from '../domain/match.js';
+import type { LobbyState } from './lobby-contracts.js';
+import type { MapKey } from '../domain/maps.js';
+import type { HitscanPorts, MeleeImpactPorts } from '../gameplay/weapons/impact-contracts.js';
+import type { GunServices, BladeServices } from '../gameplay/weapons/services.js';
 import { createCombat } from './combat.js';
 import { UserSettings } from './user-settings.js';
 import { RunProgress } from './run-progress.js';
@@ -20,19 +37,15 @@ import { knownMap } from '../domain/maps.js';
 import { SceneResources } from '../engine/resources.js';
 
 /** Owns resources and shared match state; controllers receive explicit actions from composition. */
-/**
- * @param {import('./contracts.js').ApplicationOptions} options
- * @param {import('./combat-contracts.js').CombatActions} actions
- */
-export function createRuntime(options, actions) {
-  const audio = options.audio ?? new Sfx();
+export function createRuntime(options: ApplicationOptions, actions: CombatActions) {
+  const audio: ApplicationAudio = options.audio ?? new Sfx();
   const resources = new SceneResources();
   const canvas = options.canvas;
-  const R = options.renderer ?? new InkRenderer(canvas);
+  const R: RenderingPort = options.renderer ?? new InkRenderer(canvas);
   const world = new World();
   const preferences = options.preferences ?? browserPreferences();
   const saved = preferences.load();
-  const state = {
+  const profile: Omit<RuntimeState, 'level' | 'nav'> = {
     ...saved,
     loadedKey: saved.mapKey,
     arenaLoaded: false,
@@ -43,17 +56,18 @@ export function createRuntime(options, actions) {
     pickups: [],
     pickupClock: 0,
   };
+  const level = buildLevel(R.scene, world, profile.mapKey, { arena: false });
+  const state: RuntimeState = {
+    ...profile,
+    level,
+    nav: new NavGrid(world, level.bounds, 1).build(),
+  };
   const progress = new RunProgress(state, preferences);
-  state.level = buildLevel(R.scene, world, state.mapKey, { arena: false });
-  state.nav = new NavGrid(world, state.level.bounds, 1).build();
-  const input = options.input ?? new Input(canvas);
-  const hud = options.hud ?? new HUD(options.hudRoot);
+  const input: ApplicationInput = options.input ?? new Input(canvas);
+  const hud: ApplicationHud = options.hud ?? new HUD(options.hudRoot);
   const effects = new Effects(R.scene, world, resources);
-  /** @type {Player} */
-  let player;
-  /** @type {import('./combat.js').Combat | null} */
-  let combat = null;
-  const game = {
+  let combat: Combat | null = null;
+  const game: GameState = {
     state: 'start',
     mode: 'solo',
     menu: false,
@@ -106,12 +120,14 @@ export function createRuntime(options, actions) {
     hitstop: (duration, scale) => game.hitstop(duration, scale),
     score: (points, label) => game.addScore(points, label),
   });
-  const enemyWeaponQueries = {
+  const enemyWeaponQueries: HitscanPorts<EnemyActor, CombatOpponent>['enemies'] &
+    MeleeImpactPorts<EnemyActor, CombatOpponent>['enemies'] = {
     raycast: (...args) => enemies.raycast(...args),
     inArc: (...args) => enemies.inArc(...args),
     damage: (...args) => enemies.damage(...args),
   };
-  const playerWeaponQueries = {
+  const playerWeaponQueries: HitscanPorts<EnemyActor, CombatOpponent>['players'] &
+    MeleeImpactPorts<EnemyActor, CombatOpponent>['players'] = {
     raycast: (...args) => combat?.raycastPlayers(...args) ?? null,
     inArc: (...args) => combat?.playersInArc(...args) ?? [],
     damage: (...args) => combat?.hitPlayer(...args),
@@ -141,7 +157,7 @@ export function createRuntime(options, actions) {
       damage: (...args) => combat?.breakHit(...args),
     },
   });
-  const gunServices = {
+  const gunServices: GunServices = {
     player: () => player,
     impacts: hitscan,
     effects,
@@ -149,7 +165,7 @@ export function createRuntime(options, actions) {
     input,
     hitstop: (duration, scale) => game.hitstop(duration, scale),
   };
-  const bladeServices = {
+  const bladeServices: BladeServices = {
     player: () => player,
     impacts: meleeImpacts,
     effects,
@@ -157,7 +173,7 @@ export function createRuntime(options, actions) {
     input,
     hitstop: (duration, scale) => game.hitstop(duration, scale),
   };
-  player = new Player({
+  const player: Player = new Player({
     environment: {
       scene: R.scene,
       camera: R.camera,
@@ -179,13 +195,15 @@ export function createRuntime(options, actions) {
       raycastEnemy: (...args) => enemies.raycast(...args),
       enemies: () => enemies.enemies,
       landmarks: () => state.level,
-      yank: (...args) => enemies.yank(...args),
+      yank: (target, toward) => {
+        if (target instanceof EnemyActor) enemies.yank(target, toward);
+      },
     },
     died: () => game.onPlayerDeath(),
   });
   player.name = state.myName;
   const remoteServices = { scene: R.scene, resources, effects, localEye: () => player.eye };
-  const net = options.net ?? new Net();
+  const net: ApplicationTransport = options.net ?? new Net();
   const userSettings = new UserSettings({
     state,
     preferences,
@@ -194,8 +212,8 @@ export function createRuntime(options, actions) {
     player,
     transport: net,
   });
-  const remote = new Map();
-  const lobby = {
+  const remote = new Map<string, RemotePlayer>();
+  const lobby: LobbyState = {
     players: new Map(),
     hostId: null,
     isPublic: true,
@@ -203,10 +221,10 @@ export function createRuntime(options, actions) {
     code: '',
     map: null,
   };
-  const scores = new Map();
+  const scores = new Map<string, Score>();
   const online = () => game.mode === 'ffa';
   const inMatch = () => ['play', 'dying', 'over'].includes(game.state);
-  const shotQueue = [];
+  const shotQueue: number[] = [];
   const targets = () => [player, ...remote.values()];
   const combatServices = createCombat(
     {
@@ -239,7 +257,7 @@ export function createRuntime(options, actions) {
   );
   combat = combatServices;
 
-  function setLevel(key, arena, force = false) {
+  function setLevel(key: MapKey, arena: boolean, force = false) {
     if (!force && key === state.loadedKey && arena === state.arenaLoaded) return;
     for (const mesh of state.level.meshes) resources.release(mesh);
     state.level.animated.length = 0;
@@ -251,7 +269,7 @@ export function createRuntime(options, actions) {
     state.nav = new NavGrid(world, state.level.bounds, 1).build();
     audio.setTune(key === 'mexico' ? 'mexico' : 'district');
   }
-  const setArena = (arena) =>
+  const setArena = (arena: boolean) =>
     setLevel(knownMap(net.active ? lobby.map || state.mapKey : state.mapKey), arena);
   const applySettings = () => userSettings.applyLook();
   audio.setTune(state.mapKey === 'mexico' ? 'mexico' : 'district');

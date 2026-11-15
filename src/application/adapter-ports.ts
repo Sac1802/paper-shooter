@@ -1,3 +1,5 @@
+import type { CombatPorts } from './combat-contracts.js';
+import type { HitscanPorts } from '../gameplay/weapons/impact-contracts.js';
 import type { PlayerServices, PlayerPresentation } from '../gameplay/player/services.js';
 import type { GunServices, BladeServices } from '../gameplay/weapons/services.js';
 import type { EnemySystemServices } from '../gameplay/enemies/system-contracts.js';
@@ -47,6 +49,8 @@ export type ApplicationHud = PlayerPresentation['hud'] &
     el: { board: { readonly hidden: boolean } };
   };
 export type ApplicationAudio = PlayerPresentation['audio'] &
+  CombatPorts['audio'] &
+  Pick<HitscanPorts<unknown, unknown>['feedback'], 'ricochet'> &
   EnemySystemServices['audio'] &
   GunServices['audio'] &
   BladeServices['audio'] &

@@ -52,6 +52,7 @@ export class Net {
     this.onPeerJoin = null;
     this.onPeerLeave = null;
     this.onDisconnect = null;
+    this.onAlias = null;
     this.maxPlayers = MAX_PLAYERS;
     this.accepting = true;
     this.hostName = '';
@@ -166,6 +167,7 @@ export class Net {
   }
 
   // ---- lobby creation / joining ----
+  /** @param {{ isPublic?: boolean, code?: string | null }} [options] */
   async host({ isPublic = false, code = null } = {}) {
     this.leave();
     this.isHost = true;
@@ -331,6 +333,10 @@ export class Net {
     return this.code;
   }
 
+  /**
+   * @param {Record<string, unknown>} [meta]
+   * @param {((message: string) => void) | null} [onStatus]
+   */
   async quickJoin(meta = {}, onStatus = null) {
     this.leave();
     this.isHost = false;
@@ -353,6 +359,10 @@ export class Net {
     return this.code;
   }
 
+  /**
+   * @param {Record<string, unknown>} [meta]
+   * @param {((message: string) => void) | null} [onStatus]
+   */
   async listLobbies(meta = {}, onStatus = null) {
     if (this.active) throw new Error('leave the lobby first');
     return this.discovery.browse(meta, onStatus);
