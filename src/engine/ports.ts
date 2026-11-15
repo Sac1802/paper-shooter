@@ -1,5 +1,6 @@
 import type { Object3D, Vector3, Vector3Like } from 'three';
 import type { Collider } from './physics.js';
+import type { Disposable } from './resources.js';
 
 export interface RaycastHit {
   point: Vector3;
@@ -18,4 +19,7 @@ export interface RaycastPort {
 export interface SceneResourcePort {
   track(root: Object3D): void;
   release(root: Object3D): void;
+}
+export interface ResourceLeasePort {
+  retain(resources: Iterable<Disposable>): () => void;
 }

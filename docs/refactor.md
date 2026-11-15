@@ -58,4 +58,6 @@ gate does not close those findings or complete the remaining gameplay/controller
   explicit session commands own death/respawn/finish phase writes, with pre-change rule regressions.
 - Moved death/respawn timing, prompts and fresh-input gating out of the loop into a checked
   session-owned component; corrected a reproduced winning-host-death transition separately.
+- Replaced pickup runtime access with checked collection/authority/inventory capabilities and
+  reusable retained-palette models; preserved both maps' pickup geometry/animation references.
 - Added deterministic unit/integration tests, Chromium smoke tests, coverage imports and pinned CI actions.

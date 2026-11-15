@@ -1,11 +1,12 @@
 import { SessionController } from './session-controller.js';
 import { RunReset } from './run-reset.js';
 import { createRuntime } from './runtime.js';
-import { createPickups } from './pickups.js';
+import { PickupController } from './pickups.js';
 import { createFocus } from './focus.js';
 import { createWaves } from './waves.js';
 import { MatchController } from './match.js';
 import { INK } from '../shared/ink.js';
+import { presentPickup } from '../presentation/pickups.js';
 import { createScreens } from './screens.js';
 import { createMultiplayer } from './multiplayer.js';
 import { createControls } from './controls.js';
@@ -39,7 +40,17 @@ export function createApplication(options) {
     },
   };
   window.__game = debug;
-  const pickups = createPickups(runtime, {});
+  const pickupFeedback = { hud: runtime.hud, audio, effects: runtime.effects };
+  const pickups = new PickupController({
+    state: runtime.state,
+    scene: runtime.R.scene,
+    resources: runtime.resources,
+    player: runtime.player,
+    transport: runtime.net,
+    map: () => runtime.state.level.key,
+    spawnPoints: () => runtime.state.level.pickups,
+    collected: (kind, point) => presentPickup(pickupFeedback, kind, runtime.state.level.key, point),
+  });
   const combat = runtime.combat;
   const focus = createFocus(runtime, {});
   const waves = createWaves(runtime, {

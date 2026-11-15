@@ -1,5 +1,6 @@
 import type { ScoreRow } from '../domain/match.js';
 import type { MapKey } from '../domain/maps.js';
+import type { PickupKind } from '../domain/pickups.js';
 
 export type WireVector = [number, number, number];
 export interface LobbyOffer {
@@ -50,7 +51,7 @@ export interface GamePayloads {
   startreq: EmptyPayload;
   end: { id: string; name: string };
   backtolobby: EmptyPayload;
-  pickup: { id: number; kind: 'ammo' | 'health'; pos: WireVector };
+  pickup: { id: number; kind: PickupKind; pos: WireVector };
   taken: { id: number };
   take: { id: number };
   ps: number[];
