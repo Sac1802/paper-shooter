@@ -119,22 +119,7 @@ export class DebrisSimulation {
         m.rotation.x += d.ang.x * dt;
         m.rotation.y += d.ang.y * dt;
         m.rotation.z += d.ang.z * dt;
-        if (d.blood && d.vel.lengthSq() > 3) {
-          d.bloodT -= dt;
-          if (d.bloodT <= 0) {
-            d.bloodT = 0.05;
-            _v.copy(d.vel)
-              .multiplyScalar(0.3)
-              .add(_v2.set(rand(-1, 1), rand(-1, 1), rand(-1, 1)));
-            this.particles.spawn('drop', m.position, _v, {
-              size: rand(0.02, 0.045),
-              life: 1.5,
-              collide: 'decal',
-              gravity: 22,
-              decalSize: 6,
-            });
-          }
-        }
+        this.trail(d, dt);
         if (m.position.y < -8) d.life = 0;
       }
       d.life -= dt;
@@ -143,6 +128,24 @@ export class DebrisSimulation {
         this.resources.release(m);
         if (d.blood) this.gibsAlive--;
         ds.splice(i, 1);
+      }
+    }
+  }
+  private trail(d: Fragment, dt: number) {
+    if (d.blood && d.vel.lengthSq() > 3) {
+      d.bloodT -= dt;
+      if (d.bloodT <= 0) {
+        d.bloodT = 0.05;
+        _v.copy(d.vel)
+          .multiplyScalar(0.3)
+          .add(_v2.set(rand(-1, 1), rand(-1, 1), rand(-1, 1)));
+        this.particles.spawn('drop', d.mesh.position, _v, {
+          size: rand(0.02, 0.045),
+          life: 1.5,
+          collide: 'decal',
+          gravity: 22,
+          decalSize: 6,
+        });
       }
     }
   }
