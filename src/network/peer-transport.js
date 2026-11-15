@@ -114,7 +114,9 @@ export class Net {
     });
   }
   _wire(conn) {
+    const generation = this.generation;
     conn.on('data', (msg) => {
+      if (generation !== this.generation || this.conns.get(conn.peer) !== conn) return;
       this.stats.recv++;
       if (!isWireMessage(msg)) return;
       this._route(msg, conn.peer);
