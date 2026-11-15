@@ -27,7 +27,7 @@ describe('weapons and multiplayer models', () => {
       world.finalize();
       player.body.pos.set(0, 0, 0);
       player._updateCamera(0.1);
-      const gun = new Weapon(ctx);
+      const gun = new Weapon(ctx.gunServices);
       const st = player._weaponState(false, false, 0);
       const total = gun.mag + gun.reserve;
       gun.fire(st);

@@ -48,7 +48,12 @@ export class Player {
     this.rig = new THREE.Group();
     this.camera.add(this.rig);
     ctx.scene.add(this.camera);
-    const weapons = [new Rifle(ctx), new Shotgun(ctx), new Sniper(ctx), new Katana(ctx)];
+    const weapons = [
+      new Rifle(ctx.gunServices),
+      new Shotgun(ctx.gunServices),
+      new Sniper(ctx.gunServices),
+      new Katana(ctx.bladeServices),
+    ];
     for (const weapon of weapons) this.rig.add(weapon.root);
     this.equipment = new Equipment(weapons, {
       selected: (weapon, silent) => {

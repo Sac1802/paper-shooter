@@ -42,10 +42,13 @@ cycles. Method mixins bound to the original weapon would leave hidden access to 
 Explicit model/phase contracts add some forwarding, but let mechanics tests run without rendering,
 audio, enemies or application setup.
 
-The gameplay adapters still inherit the common view-motion base and receive the legacy gameplay
-context. They are intentionally visible migration work for R5; checked mechanics/presentation do
-not imply that their JavaScript composition is checked. Do not pass the complete adapter into the
-new owners or add unrelated state to a phase frame.
+Gun and Katana are now checked adapters with explicit player-pose/action, impact, audio, input,
+effects and hitstop services. Their common ViewModel base owns only view motion and consumes a
+typed frame; it has no application context. Gun balance metadata stays in its definition rather
+than being copied onto the instance with Object.assign. A reused muzzle reader avoids a new
+callback allocation for each pellet. The legacy player/runtime binding is still migration work
+for R5; these checked adapters do not imply that composition is checked. Do not pass a complete
+adapter into a leaf owner or add unrelated state to a phase frame.
 
 ## Evidence
 

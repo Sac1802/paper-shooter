@@ -57,7 +57,7 @@ it.each([Rifle, Shotgun, Sniper, Revolver, Katana].map((Weapon) => [Weapon.name,
       world.finalize();
       player.body.pos.set(0, 0, 0);
       player._updateCamera(0.1);
-      const weapon = new Weapon(ctx);
+      const weapon = new Weapon(Weapon === Katana ? ctx.bladeServices : ctx.gunServices);
       resources.track(weapon.root);
       weapon.equip();
       const shape = geometry(weapon.root),

@@ -143,6 +143,22 @@ export function createRuntime(options) {
       damage: (...args) => ctx.breakHit(...args),
     },
   });
+  ctx.gunServices = {
+    player: () => ctx.player,
+    impacts: ctx.hitscan,
+    effects,
+    audio,
+    input,
+    hitstop: (duration, scale) => game.hitstop(duration, scale),
+  };
+  ctx.bladeServices = {
+    player: () => ctx.player,
+    impacts: ctx.meleeImpacts,
+    effects,
+    audio,
+    input,
+    hitstop: (duration, scale) => game.hitstop(duration, scale),
+  };
   const player = (ctx.player = new Player(ctx));
   player.name = state.myName;
   const net = options.net ?? new Net();

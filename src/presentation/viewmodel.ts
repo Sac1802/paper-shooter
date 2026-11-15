@@ -1,10 +1,25 @@
 import * as THREE from 'three';
+import type { WeaponFrame } from '../domain/weapon-frame.js';
 import { clamp, damp, Spring3 } from '../engine/math.js';
-const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 
-export class ViewModel {
-  constructor(ctx) {
-    this.ctx = ctx;
+export abstract class ViewModel {
+  readonly root: THREE.Group;
+  readonly scale: number;
+  readonly basePos: THREE.Vector3;
+  readonly baseRot: THREE.Vector3;
+  readonly aimPos: THREE.Vector3;
+  adsFov: number;
+  isGun: boolean;
+  scope?: boolean;
+  readonly recoil: Spring3;
+  readonly recoilRot: Spring3;
+  readonly swayPos: THREE.Vector3;
+  readonly swayRot: THREE.Vector3;
+  aimAmt: number;
+  private sprintAmt: number;
+  private equipT: number;
+  constructor() {
     this.root = new THREE.Group();
     this.scale = 0.46;
     this.root.scale.setScalar(this.scale);
@@ -22,7 +37,7 @@ export class ViewModel {
     this.sprintAmt = 0;
     this.equipT = 0;
   }
-  setSight(x, y, z, dist) {
+  setSight(x: number, y: number, z: number, dist: number) {
     this.aimPos.set(-x * this.scale, -y * this.scale, -z * this.scale - dist);
   }
   equip() {
@@ -32,7 +47,7 @@ export class ViewModel {
   unequip() {
     this.root.visible = false;
   }
-  animate(dt, st) {
+  animate(dt: number, st: WeaponFrame) {
     const lx = clamp(st.lookDelta.x, -0.12, 0.12),
       ly = clamp(st.lookDelta.y, -0.12, 0.12);
     this.aimAmt = damp(this.aimAmt, st.aim ? 1 : 0, 14, dt);
@@ -82,4 +97,5 @@ export class ViewModel {
     if (this.scope) this.root.visible = this.aimAmt < 0.8;
     this.update(dt, st);
   }
+  protected abstract update(dt: number, frame: WeaponFrame): void;
 }
