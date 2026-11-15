@@ -29,3 +29,14 @@ export function matchResults(view: MatchView, winner: Winner): string {
   const title = winner.id === view.localId ? 'YOU WIN' : (winner.name || 'someone') + ' WINS';
   return `<h1>${esc(title)}</h1><div class="scoreboard">${view.rows.map(([id, score]) => `<div class="${id === view.localId ? 'me' : ''}"><span>${esc(score.name)}</span><span>${esc(score.kills)} K · ${esc(score.deaths)} D</span></div>`).join('')}</div><div class="go" id="overGo">back to the lobby in a moment…</div>`;
 }
+
+/** Text-only feed label; the HUD publishes it through text nodes. */
+export function localDeathNotice(
+  killerName: string | null | undefined,
+  how: string | null,
+  hit: { readonly crit?: boolean } | null,
+): string {
+  return killerName
+    ? 'erased by ' + killerName + (how ? ' · ' + how + (hit?.crit ? ' headshot' : '') : '')
+    : 'erased';
+}

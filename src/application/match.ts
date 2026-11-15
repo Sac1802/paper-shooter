@@ -2,9 +2,10 @@ import { Vector3 } from 'three';
 import { choose } from '../engine/math.js';
 import { FFA_TARGET, rankScores, recordDeath, parseScoreRows } from '../domain/match.js';
 import type { WireVector } from '../network/game-message-types.js';
+import type { PlayerHitReceipt } from '../gameplay/player/services.js';
 import type { Winner } from './session-contracts.js';
 import type { MatchPorts } from './match-contracts.js';
-import { matchBoard, matchLeaders, matchResults } from '../presentation/match.js';
+import { matchBoard, matchLeaders, matchResults, localDeathNotice } from '../presentation/match.js';
 
 const HOW: ReadonlyMap<string, string> = new Map([
   ['rifle', 'rifle'],
@@ -14,6 +15,9 @@ const HOW: ReadonlyMap<string, string> = new Map([
   ['grenade', 'grenade'],
   ['deflect', 'their own bullet'],
 ]);
+function ragdollOverkill(hit: Pick<PlayerHitReceipt, 'crit' | 'amount' | 'src'> | null) {
+  return !!(hit?.crit || (hit?.amount ?? 0) >= 90 || hit?.src === 'katana');
+}
 /** Match rules and ordered reports; session owns phases and presentation owns HTML. */
 export class MatchController {
   constructor(private readonly ports: MatchPorts) {}
@@ -71,19 +75,14 @@ export class MatchController {
     transport.broadcast('pdead', {
       killer,
       dir: direction,
-      over: !!(hit?.crit || (hit?.amount ?? 0) >= 90 || hit?.src === 'katana'),
+      over: ragdollOverkill(hit),
       how,
       crit: !!hit?.crit,
     });
     if (transport.isHost && transport.id !== null) this.tallyDeath(transport.id, killer);
     session.playerDied();
     const killerName = killer ? scores.get(killer)?.name : null;
-    hud.kill(
-      killerName
-        ? 'erased by ' + killerName + (how ? ' · ' + how + (hit?.crit ? ' headshot' : '') : '')
-        : 'erased',
-      0,
-    );
+    hud.kill(localDeathNotice(killerName, how, hit), 0);
   }
   respawnLocal() {
     const { player, localName, session, hud, spawnFeedback } = this.ports;

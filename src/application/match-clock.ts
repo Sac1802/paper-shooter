@@ -30,18 +30,20 @@ export class MatchClock {
       inMatch() && !game.over && (transport.isHost ? !!game.clockStarted : state.clockRunning);
     if (inMatch() && !game.over) {
       if (on) state.matchLeft = Math.max(0, state.matchLeft - dt);
-      if (transport.isHost) {
-        state.clockT -= dt;
-        if (state.clockT <= 0) {
-          state.clockT = 2;
-          transport.send('clock', { left: Math.round(state.matchLeft), on });
-        }
-      }
+      if (transport.isHost) this.report(dt, on);
       timer(on ? formatClock(state.matchLeft) : 'clock starts when someone joins');
     }
     if (transport.isHost && on) {
       game.matchT += dt;
       if (state.matchLeft <= 0) this.finish();
+    }
+  }
+  private report(dt: number, on: boolean) {
+    const { state, transport } = this.ports;
+    state.clockT -= dt;
+    if (state.clockT <= 0) {
+      state.clockT = 2;
+      transport.send('clock', { left: Math.round(state.matchLeft), on });
     }
   }
   private finish() {
