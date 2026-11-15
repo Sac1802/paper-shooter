@@ -1,10 +1,12 @@
 import * as THREE from 'three';
+import { SessionTasks } from './session-tasks.js';
 import { INK } from '../shared/ink.js';
 import { RemotePlayer, encodeLocal } from '../gameplay/remote-player.js';
 import { knownMap } from '../domain/maps';
 import { FFA_TIME, formatClock as mmss } from '../domain/match';
 
 export function createMultiplayer(runtime, actions = {}) {
+  const tasks = new SessionTasks();
   const audio = runtime.audio;
   const {
     remote,
@@ -104,20 +106,19 @@ export function createMultiplayer(runtime, actions = {}) {
   };
   // ---- host transfer: when the host goes, the earliest-joined player left takes over on a generation
   // code (the old code is slow to free up on the signalling server); everyone else rejoins there
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  let migrating = false;
   async function migrateHost() {
-    if (migrating) return;
-    migrating = true;
+    if (tasks.migrating) return;
+    const task = tasks.begin('migrate');
+    if (!task) return;
     try {
-      await _migrateHost();
+      await _migrateHost(task);
     } catch {
-      leaveOnline('could not recover the lobby after the host left');
+      if (task.current) leaveOnline('could not recover the lobby after the host left');
     } finally {
-      migrating = false;
+      tasks.finish(task);
     }
   }
-  async function _migrateHost() {
+  async function _migrateHost(task) {
     const oldHost = lobby.hostId,
       myId = net.id;
     const gen = (lobby.gen || 0) + 1;
@@ -148,9 +149,10 @@ export function createMultiplayer(runtime, actions = {}) {
       for (let tries = 0; tries < 2 && !ok; tries++) {
         try {
           await net.host({ isPublic: lobby.isPublic, code });
+          if (!task.current) return;
           ok = true;
         } catch (e) {
-          await sleep(800);
+          if (!(await task.wait(800))) return;
         }
       }
       if (!ok) {
@@ -169,6 +171,7 @@ export function createMultiplayer(runtime, actions = {}) {
       net.accepting = true;
       game.clockStarted = runtime.state.clockRunning || runtime.state.matchLeft < FFA_TIME;
       net.onAlias = () => {
+        if (!task.current) return;
         broadcastLobby();
         hud.kill('lobby code ' + base + ' is back', 0);
       };
@@ -185,15 +188,16 @@ export function createMultiplayer(runtime, actions = {}) {
       }
       broadcastLobby();
     } else {
-      await sleep(1200);
+      if (!(await task.wait(1200))) return;
       const deadline = performance.now() + 20000;
       let joined = false;
       while (!joined && performance.now() < deadline) {
         try {
           await net.join(code, { name: runtime.state.myName, prev: myId });
+          if (!task.current) return;
           joined = true;
         } catch (e) {
-          await sleep(1200);
+          if (!(await task.wait(1200))) return;
         }
       }
       if (!joined) {
@@ -462,7 +466,7 @@ export function createMultiplayer(runtime, actions = {}) {
     syncTick++;
     for (const r of remote.values()) r.update(dt, now);
     // a connection that died without saying so leaves a figure standing around: drop anyone silent too long
-    if (inMatch() && !migrating)
+    if (inMatch() && !tasks.migrating)
       for (const [id, r] of remote) {
         if (r.lastSeen && performance.now() - r.lastSeen > 9000) {
           if (!net.isHost && id === net.hostId) {
@@ -525,8 +529,20 @@ export function createMultiplayer(runtime, actions = {}) {
       }
     }
   }
-  function leaveOnline(reason) {
+  function cancelPending() {
+    tasks.cancel();
     net.leave();
+  }
+  function dispose() {
+    tasks.dispose();
+    net.onPeerJoin = null;
+    net.onPeerLeave = null;
+    net.onDisconnect = null;
+    net.onAlias = null;
+    net.leave();
+  }
+  function leaveOnline(reason) {
+    cancelPending();
     for (const id of [...remote.keys()]) removeRemote(id);
     lobby.players.clear();
     scores.clear();
@@ -544,10 +560,14 @@ export function createMultiplayer(runtime, actions = {}) {
     showStart();
   }
   async function createLobby(isPublic) {
+    const task = tasks.begin('connect');
+    if (!task) return;
     setStatus('opening a lobby…');
     try {
       await net.host({ isPublic });
+      if (!task.current) return;
     } catch (err) {
+      if (!task.current) return;
       setStatus(friendlyError(err));
       unlockButtons();
       return;
@@ -563,10 +583,14 @@ export function createMultiplayer(runtime, actions = {}) {
     showStart();
   }
   async function joinLobby(code) {
+    const task = tasks.begin('connect');
+    if (!task) return;
     setStatus('connecting…');
     try {
       await net.join(code, { name: runtime.state.myName });
+      if (!task.current) return;
     } catch (err) {
+      if (!task.current) return;
       setStatus(friendlyError(err));
       unlockButtons();
       return;
@@ -578,8 +602,13 @@ export function createMultiplayer(runtime, actions = {}) {
     showStart();
   }
   async function quickPlay() {
+    const task = tasks.begin('connect');
+    if (!task) return;
     try {
-      await net.quickJoin({ name: runtime.state.myName }, setStatus);
+      await net.quickJoin({ name: runtime.state.myName }, (status) => {
+        if (task.current) setStatus(status);
+      });
+      if (!task.current) return;
       lobby.isPublic = true;
       lobby.status = '';
       game.state = 'lobby';
@@ -587,6 +616,7 @@ export function createMultiplayer(runtime, actions = {}) {
       showStart();
       return;
     } catch (err) {
+      if (!task.current) return;
       if (!/no open public/.test(String(err.message))) {
         setStatus(friendlyError(err));
         unlockButtons();
@@ -618,13 +648,13 @@ export function createMultiplayer(runtime, actions = {}) {
   }
 
   return {
+    cancelPending,
+    dispose,
     addRemote,
     removeRemote,
     lobbyRows,
     broadcastLobby,
-    sleep,
     migrateHost,
-    _migrateHost,
     idleUpdate,
     netUpdate,
     leaveOnline,

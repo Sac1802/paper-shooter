@@ -48,6 +48,7 @@ export function createApplication(options) {
     endFocus: (...args) => focus.endFocus(...args),
   });
   const screens = createScreens(runtime, {
+    cancelPending: () => multiplayer.cancelPending(),
     lobbyRows: (...args) => multiplayer.lobbyRows(...args),
     friendlyError: (...args) => multiplayer.friendlyError(...args),
     quickPlay: (...args) => multiplayer.quickPlay(...args),
@@ -127,7 +128,7 @@ export function createApplication(options) {
     disposed = true;
     loop.stop();
     controls.dispose();
-    runtime.net.leave();
+    multiplayer.dispose();
     runtime.input.dispose?.();
     runtime.player.dispose();
     pickups.dispose();

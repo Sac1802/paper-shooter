@@ -19,6 +19,7 @@ export function createScreens(runtime, actions = {}) {
     remote,
   } = runtime;
   const {
+    cancelPending,
     lobbyRows,
     friendlyError,
     quickPlay,
@@ -208,6 +209,7 @@ export function createScreens(runtime, actions = {}) {
       });
     if (q('backBtn'))
       q('backBtn').addEventListener('click', () => {
+        cancelPending();
         lobby.status = '';
         lobby.rejoinCode = null;
         runtime.state.screen = 'main';
