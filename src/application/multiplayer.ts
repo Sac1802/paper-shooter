@@ -3,7 +3,12 @@ import { LobbyConnection } from './lobby-connection.js';
 import { connectionError } from '../presentation/network-errors.js';
 import { INK } from '../shared/ink.js';
 import { RemotePlayer } from '../gameplay/remote-player.js';
-import { knownMap } from '../domain/maps';
+import { knownMap } from '../domain/maps.js';
+import type {
+  MultiplayerPorts,
+  MultiplayerActions,
+  MultiplayerPeer,
+} from './multiplayer-contracts.js';
 import { IdlePlayers } from './idle-players.js';
 import { MatchClock } from './match-clock.js';
 import { NetworkSync } from './network-sync.js';
@@ -11,8 +16,8 @@ import { CombatMessages } from './combat-messages.js';
 import { RemoteRoster } from './remote-roster.js';
 import { NetworkCombatFeedback } from '../presentation/network-combat-feedback.js';
 
-export function createMultiplayer(runtime, actions = {}) {
-  const audio = runtime.audio;
+export function createMultiplayer(ports: MultiplayerPorts, actions: MultiplayerActions) {
+  const audio = ports.audio;
   const {
     remote,
     remoteServices,
@@ -27,7 +32,7 @@ export function createMultiplayer(runtime, actions = {}) {
     effects,
     online,
     shotQueue,
-  } = runtime;
+  } = ports;
   const {
     renderLobby,
     sendScores,
@@ -50,7 +55,7 @@ export function createMultiplayer(runtime, actions = {}) {
     transport: net,
     lobby,
     scores,
-    local: runtime.state,
+    local: ports.local,
     removeRemote: (id) => removeRemote(id),
     remoteIds: () => remote.keys(),
     inMatch,
@@ -58,7 +63,7 @@ export function createMultiplayer(runtime, actions = {}) {
     session,
     presentation: connectionPresentation,
   });
-  const leaveOnline = (reason) => connection.leaveOnline(reason);
+  const leaveOnline = (reason = '') => connection.leaveOnline(reason);
   const migrateHost = () => connection.migrateHost();
   const combatFeedback = new NetworkCombatFeedback({
     player,
@@ -84,41 +89,43 @@ export function createMultiplayer(runtime, actions = {}) {
     tally: tallyDeath,
   });
 
-  const roster = new RemoteRoster({
+  const roster = new RemoteRoster<MultiplayerPeer>({
     peers: remote,
     lobby,
     scores,
     transport: net,
     createPeer: makeRemote,
-    map: () => runtime.state.mapKey,
+    map: () => ports.local.mapKey,
     phase: () => game.state,
     inMatch,
     brokenIds: () =>
-      runtime.state.level.breakables.filter((prop) => !prop.alive).map((prop) => prop.id),
+      ports.local.level.breakables.filter((prop) => !prop.alive).map((prop) => prop.id),
     farthestSpawnIndex,
     render: renderLobby,
     sendScores,
     refreshScores: refreshScoreHud,
     feed: (text) => hud.kill(text, 0),
   });
-  function makeRemote(id, name) {
+  function makeRemote(id: string, name: string) {
     const rp = new RemotePlayer(remoteServices, id, name, 0, INK.RED);
     rp.onDamage = (t, amount, fromPos) => {
-      if (!runtime.combat.canHurt(t) || !t.alive) return;
+      if (!ports.canHurt(t) || !t.alive) return;
       hud.hitmarker(false, false);
       net.sendTo(t.id, 'pdmg', {
         amount: Math.round(amount),
-        from: fromPos ? fromPos.toArray().map((v) => +v.toFixed(1)) : null,
-        by: net.id,
+        from: fromPos
+          ? [+fromPos.x.toFixed(1), +fromPos.y.toFixed(1), +fromPos.z.toFixed(1)]
+          : null,
+        by: net.id ?? undefined,
         src: 'grenade',
       });
     };
     return rp;
   }
-  function addRemote(id, name) {
+  function addRemote(id: string, name: string) {
     return roster.add(id, name);
   }
-  function removeRemote(id) {
+  function removeRemote(id: string) {
     roster.remove(id);
   }
   function lobbyRows() {
@@ -134,17 +141,17 @@ export function createMultiplayer(runtime, actions = {}) {
     else leaveOnline('the host left the lobby');
   };
   net.on('refused', (d) => leaveOnline(d.reason));
-  net.hostName = runtime.state.myName;
+  net.hostName = ports.local.myName;
   net.onPeerJoin = (id, metadata) => roster.join(id, metadata);
   net.onHost('lobby', (data) => roster.receive(data));
   net.onHost('leave', (data) => roster.leave(data.id));
   net.onHost('start', (d) => {
     if (net.isHost) return;
     if (d.map) lobby.map = knownMap(d.map);
-    startMatch(!!d.late, d.spawns ? d.spawns[net.id] : d.spawn);
+    startMatch(!!d.late, d.spawns ? (net.id === null ? undefined : d.spawns[net.id]) : d.spawn);
     if (d.broken)
       for (const id of d.broken) {
-        const br = runtime.state.level.breakables[id];
+        const br = ports.local.level.breakables[id];
         if (br) breakProp(br, null, false, true);
       }
   });
@@ -159,12 +166,12 @@ export function createMultiplayer(runtime, actions = {}) {
     if (!net.isHost) spawnPickup(d.kind, new THREE.Vector3().fromArray(d.pos), d.id);
   });
   net.onHost('taken', (d) => {
-    const p = runtime.state.pickups.find((x) => x.id === d.id);
+    const p = ports.local.pickups.find((x) => x.id === d.id);
     if (p) removePickup(p);
   });
   net.on('take', (d) => {
     if (!net.isHost) return;
-    const p = runtime.state.pickups.find((x) => x.id === d.id);
+    const p = ports.local.pickups.find((x) => x.id === d.id);
     if (p) {
       removePickup(p);
       net.send('taken', { id: d.id });
@@ -181,7 +188,7 @@ export function createMultiplayer(runtime, actions = {}) {
   net.on('pdead', (data, sender) => combatMessages.death(data, sender));
   net.on('nade', (data) => combatMessages.grenade(data));
   net.on('brk', (d) => {
-    const br = runtime.state.level.breakables[d.id];
+    const br = ports.local.level.breakables[d.id];
     if (br) breakProp(br, null, false);
   });
   net.on('parry', (data) => combatMessages.parry(data));
@@ -205,7 +212,7 @@ export function createMultiplayer(runtime, actions = {}) {
     if (!online() || !inMatch()) return;
     hud.kill('fell off the page · -1 kill', 0);
     if (net.isHost) {
-      const sc = scores.get(net.id);
+      const sc = net.id === null ? undefined : scores.get(net.id);
       if (sc) {
         sc.kills = Math.max(0, sc.kills - 1);
         sendScores();
@@ -214,12 +221,12 @@ export function createMultiplayer(runtime, actions = {}) {
     } else net.send('fell', {});
   };
   const clock = new MatchClock({
-    state: runtime.state,
+    state: ports.local,
     game,
     transport: net,
     inMatch,
     opponentCount: () => remote.size,
-    localName: () => runtime.state.myName,
+    localName: () => ports.local.myName,
     sortedScores,
     timer: (text) => hud.setTimer(text),
     end: endMatch,
@@ -285,13 +292,13 @@ export function createMultiplayer(runtime, actions = {}) {
     lobbyRows,
     broadcastLobby,
     migrateHost,
-    idleUpdate: (dt) => idle.update(dt),
-    netUpdate: (dt) => sync.update(dt),
+    idleUpdate: (dt: number) => idle.update(dt),
+    netUpdate: (dt: number) => sync.update(dt),
     leaveOnline,
-    createLobby: (isPublic) => connection.createLobby(isPublic),
-    joinLobby: (code) => connection.joinLobby(code),
+    createLobby: (isPublic: boolean) => connection.createLobby(isPublic),
+    joinLobby: (code: string) => connection.joinLobby(code),
     quickPlay: () => connection.quickPlay(),
     friendlyError: connectionError,
-    setStatus: (message) => connection.setStatus(message),
+    setStatus: (message: string) => connection.setStatus(message),
   };
 }

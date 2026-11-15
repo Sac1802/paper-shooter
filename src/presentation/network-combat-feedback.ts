@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 import { INK } from '../shared/ink.js';
-interface ShotActor {
+export interface ShotActor {
   readonly alive: boolean;
   readonly root: object | null;
   readonly body: { readonly pos: Vector3 };

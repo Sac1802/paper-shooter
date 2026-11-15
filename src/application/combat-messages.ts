@@ -2,6 +2,11 @@ import { Vector3 } from 'three';
 import type { GamePayloads } from '../network/game-message-types.js';
 import type { GamePhase, Score } from '../domain/match.js';
 import type { PlayerHitReceipt } from '../gameplay/player/services.js';
+export interface CombatMessagePeer {
+  readonly name: string;
+  readonly center: Vector3;
+  ragdoll(direction: Vector3 | null, over: boolean): void;
+}
 export interface CombatMessagePorts {
   player: {
     readonly alive: boolean;
@@ -17,14 +22,7 @@ export interface CombatMessagePorts {
   game: { readonly state: GamePhase; kills: number; addScore(points: number, label: string): void };
   transport: { readonly id: string | null; readonly isHost: boolean };
   scores: ReadonlyMap<string, Score>;
-  opponents: ReadonlyMap<
-    string,
-    {
-      readonly name: string;
-      readonly center: Vector3;
-      ragdoll(direction: Vector3 | null, over: boolean): void;
-    }
-  >;
+  opponents: ReadonlyMap<string, CombatMessagePeer>;
   feedback: {
     death(point: Vector3): void;
     kill(): void;
