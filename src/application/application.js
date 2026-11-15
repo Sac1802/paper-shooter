@@ -3,7 +3,8 @@ import { RunReset } from './run-reset.js';
 import { createRuntime } from './runtime.js';
 import { PickupController } from './pickups.js';
 import { createFocus } from './focus.js';
-import { createWaves } from './waves.js';
+import { WaveController } from './waves.js';
+import { EnemyRewards } from './enemy-rewards.js';
 import { MatchController } from './match.js';
 import { INK } from '../shared/ink.js';
 import { presentPickup } from '../presentation/pickups.js';
@@ -53,10 +54,47 @@ export function createApplication(options) {
   });
   const combat = runtime.combat;
   const focus = createFocus(runtime, {});
-  const waves = createWaves(runtime, {
+  const waves = new WaveController({
+    state: runtime.game,
+    level: () => runtime.state.level,
+    checkpoint: () => runtime.state.checkpoint,
+    saveCheckpoint: (wave) => {
+      runtime.state.checkpoint = wave;
+      runtime.preferences.write('checkpoint', String(wave));
+    },
+    player: runtime.player,
+    enemies: runtime.enemies,
+    world: runtime.world,
+    hud: runtime.hud,
+    audio,
     spawnPickup: (...args) => pickups.spawnPickup(...args),
-    enterFocus: (...args) => focus.enterFocus(...args),
+    score: (points, label) => runtime.game.addScore(points, label),
   });
+  const rewards = new EnemyRewards({
+    state: runtime.game,
+    grounded: () => runtime.player.body.onGround,
+    bladeBlood: (amount) => {
+      const blade = runtime.player.weapons[runtime.player.katanaIndex];
+      if (blade.kind === 'katana') blade.addBlood(amount);
+    },
+    enterFocus: () => focus.enterFocus(),
+    score: (points, label) => runtime.game.addScore(points, label),
+    killSound: (strong) => audio.kill(strong),
+    spawnPickup: (...args) => pickups.spawnPickup(...args),
+  });
+  runtime.enemies.onKill = (enemy, impact, severed) => rewards.grant(enemy, impact, severed);
+  runtime.enemies.onBoss = (enemy) => {
+    if (!enemy.alive) {
+      runtime.hud.setBoss(null, null);
+      runtime.game.boss = null;
+    } else {
+      runtime.game.boss = enemy;
+      runtime.hud.setBoss(enemy.T.name, enemy.hp / enemy.maxHp);
+    }
+  };
+  runtime.player.onThrow = (data) => {
+    if (runtime.net.active) runtime.net.broadcast('nade', data);
+  };
   const match = new MatchController({
     player: runtime.player,
     opponents: () => runtime.remote.values(),

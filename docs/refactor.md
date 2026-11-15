@@ -60,4 +60,6 @@ gate does not close those findings or complete the remaining gameplay/controller
   session-owned component; corrected a reproduced winning-host-death transition separately.
 - Replaced pickup runtime access with checked collection/authority/inventory capabilities and
   reusable retained-palette models; preserved both maps' pickup geometry/animation references.
+- Replaced wave runtime access with checked progression/spawn/checkpoint capabilities and an
+  independent kill-reward owner; composition owns enemy observers and grenade transport binding.
 - Added deterministic unit/integration tests, Chromium smoke tests, coverage imports and pinned CI actions.

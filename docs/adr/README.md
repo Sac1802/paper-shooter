@@ -19,6 +19,7 @@
 | [0015](0015-combat-capabilities-and-composition.md) | Scoped combat policy, feedback, reports and explicit composition    | Accepted |
 | [0016](0016-match-rules-and-presentation.md)        | Match rules, phase commands and pure score presentation             | Accepted |
 | [0017](0017-pickup-policy-and-presentation.md)      | Pickup collection/authority policy, models and retained palette     | Accepted |
+| [0018](0018-wave-progression-and-rewards.md)        | Solo progression, spawn policy, reward commands and event binding   | Accepted |
 
 Each decision records context, alternatives, consequences and evidence. Revisit a decision when its
 constraints change; retain superseded records so their reasoning remains available.
