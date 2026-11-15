@@ -3,6 +3,7 @@
 // target (body, center, eye, hit spheres, takeDamage) so the rest of the game does not care
 // whether it is shooting at a bot or a friend.
 import * as THREE from 'three';
+import { RemoteRagdoll } from '../presentation/characters/remote-ragdoll.js';
 import { RemoteGrapple } from '../presentation/remote-grapple.js';
 import { RemoteInterpolation } from './remote/interpolation.js';
 import { makeInkMaterial, setFill } from '../presentation/ink/materials.js';
@@ -13,8 +14,7 @@ import {
   remoteAnimationFrame,
 } from '../presentation/characters/remote-animation.js';
 
-const _v = new THREE.Vector3(),
-  _v2 = new THREE.Vector3();
+const _v = new THREE.Vector3();
 const WEAPON_KINDS = ['rifle', 'shotgun', 'sniper', 'blade'];
 const HIT = [
   ['head', 0.3],
@@ -76,6 +76,7 @@ export class RemotePlayer {
     this.aiming = false;
     this.firing = false;
     this.animation = new RemoteAnimation();
+    this.death = new RemoteRagdoll(services.scene, services.effects);
     this.animationFrame = remoteAnimationFrame(this.body.vel, this.body.pos);
     this.flashT = 0;
     this.deadT = 0;
@@ -95,6 +96,7 @@ export class RemotePlayer {
     this.hit = HIT;
     this.hitSpheres = HIT.map(() => new THREE.Vector3());
     this.vel = new THREE.Vector3();
+    this.deathPose = { center: this.center, position: this.body.pos, velocity: this.vel };
     this.interpolation = new RemoteInterpolation(this.body, this.vel);
     this.grappling = false;
     this.gPoint = new THREE.Vector3();
@@ -130,74 +132,12 @@ export class RemotePlayer {
   ragdoll(dir, over) {
     if (this.corpse) return;
     this.corpse = true;
-    const eff = this.services.effects,
-      scene = this.services.scene,
-      J = this.J;
     this.tagG.visible = false;
-    this.rope.visible = false;
-    this.hook.visible = false;
-    const d = (
-      dir && dir.lengthSq() > 0.01 ? dir.clone() : new THREE.Vector3(0, 0.4, -1)
-    ).normalize();
-    const detach = (obj, extraVel, radius) => {
-      if (!obj || !obj.parent) return;
-      obj.updateWorldMatrix(true, false);
-      scene.attach(obj);
-      _v.copy(d)
-        .multiplyScalar(4 + Math.random() * 4)
-        .add(extraVel);
-      _v.y += 2 + Math.random() * 3;
-      eff.debris(
-        obj,
-        obj.position,
-        _v,
-        new THREE.Vector3(
-          (Math.random() - 0.5) * 16,
-          (Math.random() - 0.5) * 16,
-          (Math.random() - 0.5) * 16,
-        ),
-        { radius, blood: true, life: 7 + Math.random() * 3 },
-      );
-    };
-    if (over) {
-      detach(J.headG, _v2.set((Math.random() - 0.5) * 4, 3, (Math.random() - 0.5) * 4), 0.25);
-      if (Math.random() < 0.5)
-        detach(
-          Math.random() < 0.5 ? J.armL : J.armR,
-          _v2.set((Math.random() - 0.5) * 6, 2, (Math.random() - 0.5) * 6),
-          0.12,
-        );
-    }
-    // limp joints, then the body flies as one piece
-    for (const k of ['armL', 'armR', 'legL', 'legR', 'foreL', 'foreR', 'shinL', 'shinR'])
-      if (J[k]) {
-        J[k].rotation.x = (Math.random() - 0.5) * 2.4;
-        J[k].rotation.z = (Math.random() - 0.5) * 1.2;
-      }
-    if (this.face) {
-      this.face.eyes.visible = false;
-      this.face.xeyes.visible = true;
-    }
-    this.root.updateWorldMatrix(true, false);
-    scene.attach(this.root);
-    _v.copy(d).multiplyScalar(5 + Math.random() * 3);
-    _v.y += 3.5 + Math.random() * 2;
-    _v.addScaledVector(this.vel, 0.4);
-    eff.debris(
-      this.root,
-      this.root.position,
-      _v,
-      new THREE.Vector3(
-        (Math.random() - 0.5) * 9,
-        (Math.random() - 0.5) * 6,
-        (Math.random() - 0.5) * 9,
-      ),
-      { radius: 0.55, blood: true, life: 8 },
-    );
-    eff.blood(this.center, d, 1.3);
-    eff.bloodPool(this.body.pos, 1.2 + Math.random() * 0.6, INK.RED);
+    this.ropeView.hide();
+    this.death.perform(this.animationRig, this.deathPose, dir, over);
     this.root = null;
   }
+
   get isBlocking() {
     return this.blocking;
   }
