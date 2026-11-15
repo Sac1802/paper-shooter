@@ -221,11 +221,13 @@ export class RemotePlayer {
       this.interpolation.clearPrevious();
       this.body.pos.copy(latest.p);
     }
-    if (this.root && !this.root.visible && !this.away) {
+    const root = this.root;
+    if (!root) return;
+    if (this.away) root.visible = false;
+    else if (!root.visible) {
       this.body.pos.copy(latest.p);
-      this.root.visible = true;
+      root.visible = true;
     }
-    if (this.root && this.away) this.root.visible = false;
   }
   // damage dealt to this player by the host's bots or by another player's shot goes to its owner
   takeDamage(amount: number, fromPos: THREE.Vector3 | null = null) {
