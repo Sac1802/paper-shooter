@@ -1,21 +1,64 @@
 import * as THREE from 'three';
 import { INK } from '../../shared/ink.js';
 import { rand } from '../../engine/math.js';
+import type { RaycastPort, SceneResourcePort } from '../../engine/ports.js';
+interface FragmentOptions {
+  life?: number;
+  radius?: number;
+  blood?: boolean;
+}
+interface Fragment {
+  mesh: THREE.Object3D;
+  vel: THREE.Vector3;
+  ang: THREE.Vector3;
+  life: number;
+  radius: number;
+  blood: boolean;
+  rest: boolean;
+  bloodT: number;
+  bounces: number;
+  baseScale: number;
+}
+interface FragmentDecals {
+  splat(
+    point: THREE.Vector3,
+    normal: THREE.Vector3,
+    ink: number,
+    size: number,
+    direction: THREE.Vector3 | null,
+    cluster: number,
+  ): void;
+}
+interface FragmentParticles {
+  spawn(
+    kind: 'drop',
+    point: THREE.Vector3,
+    velocity: THREE.Vector3,
+    options: { size: number; life: number; collide: 'decal'; gravity: number; decalSize: number },
+  ): unknown;
+}
+
 const _v = new THREE.Vector3(),
   _v2 = new THREE.Vector3(),
   _d = new THREE.Vector3(),
   _prev = new THREE.Vector3();
 export class DebrisSimulation {
-  constructor(scene, world, resources, decals, particles) {
-    this.scene = scene;
-    this.world = world;
-    this.resources = resources;
-    this.decals = decals;
-    this.particles = particles;
-    this.list = [];
-    this.gibsAlive = 0;
-  }
-  spawn(mesh, pos, vel, angVel, o = {}) {
+  readonly list: Fragment[] = [];
+  gibsAlive = 0;
+  constructor(
+    private readonly scene: THREE.Scene,
+    private readonly world: RaycastPort,
+    private readonly resources: SceneResourcePort,
+    private readonly decals: FragmentDecals,
+    private readonly particles: FragmentParticles,
+  ) {}
+  spawn(
+    mesh: THREE.Object3D,
+    pos: THREE.Vector3,
+    vel: THREE.Vector3,
+    angVel: THREE.Vector3,
+    o: FragmentOptions = {},
+  ) {
     mesh.position.copy(pos);
     this.scene.add(mesh);
     this.resources.track(mesh);
@@ -34,13 +77,14 @@ export class DebrisSimulation {
     this.list.push(d);
     if (d.blood) this.gibsAlive++;
     if (this.list.length > 70) {
-      const old = this.list.shift();
+      const old = this.list[0];
+      this.list.shift();
       this.resources.release(old.mesh);
       if (old.blood) this.gibsAlive--;
     }
     return d;
   }
-  update(dt) {
+  update(dt: number) {
     // debris
     const ds = this.list;
     for (let i = ds.length - 1; i >= 0; i--) {

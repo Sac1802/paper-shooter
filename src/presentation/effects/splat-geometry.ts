@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { TAU } from '../../engine/math.js';
-export function splatGeometry(seed) {
+export function splatGeometry(seed: number) {
   const pts = [];
   const n = 20;
   const r0 = 0.42 + (0.1 * ((seed * 7) % 3)) / 3;

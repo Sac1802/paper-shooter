@@ -32,8 +32,14 @@ this order with an event bus or allocate a new dependency wrapper for each frame
 A generic ECS/audio graph framework would add a new abstraction without a demonstrated requirement.
 Splitting files at an exact line boundary would obscure ownership. The explicit owners add modules
 and a small amount of facade forwarding, but their collaborators and disposal responsibilities are
-visible. Audio contracts are checked TypeScript; the extracted effects implementation is currently
-JavaScript and must not be represented as fully statically checked.
+visible. Audio contracts are checked TypeScript. Effect instance pools, splat geometry, surface projection
+and fragment lifetime now also use checked scene/resource/raycast/particle capabilities. The pool
+owns its non-null color attribute and dirty-buffer publication; callers do not assert away the
+nullable library field. Particle simulation, recipes, particle rendering and the effects facade
+remain JavaScript and must not be represented as fully statically checked. The retained seven-argument
+buffer write stays explicit to avoid allocating per-instance parameter objects; its positional
+parameter warning remains visible for review. Existing composed fingerprints and fragment-cap/expiry
+resource regressions pass unchanged.
 
 ## Evidence
 

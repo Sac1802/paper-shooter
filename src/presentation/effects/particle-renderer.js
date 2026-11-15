@@ -47,10 +47,8 @@ export class ParticleRenderer {
     }
     drops.mesh.count = di;
     strokes.mesh.count = si;
-    drops.mesh.instanceMatrix.needsUpdate = true;
-    drops.mesh.instanceColor.needsUpdate = true;
-    strokes.mesh.instanceMatrix.needsUpdate = true;
-    strokes.mesh.instanceColor.needsUpdate = true;
+    drops.upload();
+    strokes.upload();
   }
   clear() {
     this.drops.reset();

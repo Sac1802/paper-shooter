@@ -3,6 +3,17 @@ import { INK } from '../../shared/ink.js';
 import { rand, randInt, TAU } from '../../engine/math.js';
 import { SEE_THROUGH } from '../../engine/physics.js';
 import { InstancePool } from './instance-pool.js';
+import type { RaycastPort, SceneResourcePort } from '../../engine/ports.js';
+interface GrowingDecal {
+  pool: InstancePool;
+  i: number;
+  pos: THREE.Vector3;
+  quat: THREE.Quaternion;
+  size: number;
+  t: number;
+  dur: number;
+  ink: number;
+}
 import { splatGeometry } from './splat-geometry.js';
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion(),
@@ -20,15 +31,28 @@ const _t1 = new THREE.Vector3(),
 const _z = new THREE.Vector3(0, 0, 1),
   _down = new THREE.Vector3(0, -1, 0);
 export class Decals {
-  constructor(scene, world, resources) {
-    this.world = world;
+  readonly splats: InstancePool[];
+  readonly holes: InstancePool;
+  readonly growing: GrowingDecal[] = [];
+  constructor(
+    scene: THREE.Scene,
+    private readonly world: RaycastPort,
+    resources: SceneResourcePort,
+  ) {
     this.splats = [0, 1, 2, 3, 4].map(
       (i) => new InstancePool(scene, resources, splatGeometry(i), 300, true),
     );
     this.holes = new InstancePool(scene, resources, new THREE.CircleGeometry(0.5, 8), 260, true);
-    this.growing = [];
   }
-  decal(point, normal, ink = INK.RED, size = 0.3, kind = 'splat', dir = null, stretch = 1) {
+  decal(
+    point: THREE.Vector3,
+    normal: THREE.Vector3,
+    ink = INK.RED,
+    size = 0.3,
+    kind: 'splat' | 'hole' = 'splat',
+    dir: THREE.Vector3 | null = null,
+    stretch = 1,
+  ) {
     const pool = kind === 'hole' ? this.holes : this.splats[randInt(0, this.splats.length - 1)];
     const i = pool.allocate();
     _v.copy(point).addScaledVector(normal, rand(0.012, 0.03));
@@ -47,11 +71,10 @@ export class Decals {
       _s.set(size, size * rand(0.7, 1.3), 1);
     }
     pool.write(i, _v, _q, _s, ink, true);
-    pool.mesh.instanceMatrix.needsUpdate = true;
-    pool.mesh.instanceColor.needsUpdate = true;
+    pool.upload();
     return { pool, i };
   }
-  _surfaceAt(point, normal, offset) {
+  private _surfaceAt(point: THREE.Vector3, normal: THREE.Vector3, offset: THREE.Vector3) {
     _pc.copy(point).add(offset);
     _ps.copy(_pc).addScaledVector(normal, 0.35);
     _pd.copy(normal).negate();
@@ -65,7 +88,14 @@ export class Decals {
     }
     return hit;
   }
-  splat(point, normal, ink = INK.RED, size = 0.5, dir = null, cluster = 3) {
+  splat(
+    point: THREE.Vector3,
+    normal: THREE.Vector3,
+    ink = INK.RED,
+    size = 0.5,
+    dir: THREE.Vector3 | null = null,
+    cluster = 3,
+  ) {
     this.decal(point, normal, ink, size * rand(0.55, 0.8), 'splat', dir);
     _t1.set(normal.y, normal.z, normal.x).cross(normal);
     if (_t1.lengthSq() < 1e-6) _t1.set(1, 0, 0);
@@ -90,7 +120,7 @@ export class Decals {
         this.decal(h.point, h.normal, ink, size * rand(0.16, 0.3), 'splat', _down, rand(2.5, 5));
     }
   }
-  bloodPool(pos, size = 1.3, ink = INK.RED) {
+  bloodPool(pos: THREE.Vector3, size = 1.3, ink = INK.RED) {
     _v.copy(pos);
     _v.y += 0.5;
     const base = this.world.raycast(_v, _down, 5, SEE_THROUGH);
@@ -120,7 +150,7 @@ export class Decals {
       });
     }
   }
-  update(dt) {
+  update(dt: number) {
     // growing pools
     for (let i = this.growing.length - 1; i >= 0; i--) {
       const g = this.growing[i];
@@ -129,8 +159,7 @@ export class Decals {
       const e = 1 - (1 - f) * (1 - f);
       _s.set(g.size * e, g.size * e, 1);
       g.pool.write(g.i, g.pos, g.quat, _s, g.ink, true);
-      g.pool.mesh.instanceMatrix.needsUpdate = true;
-      g.pool.mesh.instanceColor.needsUpdate = true;
+      g.pool.upload();
       if (f >= 1) this.growing.splice(i, 1);
     }
   }
