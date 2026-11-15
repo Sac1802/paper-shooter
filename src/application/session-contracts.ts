@@ -1,13 +1,10 @@
 import type { Vector3 } from 'three';
 import type { EnemyKind } from '../domain/enemies.js';
 import type { MapKey } from '../domain/maps.js';
-import type { Score } from '../domain/match.js';
+import type { Score, Winner } from '../domain/match.js';
+export type { Winner } from '../domain/match.js';
 
 export type GamePhase = 'start' | 'lobby' | 'play' | 'pause' | 'dying' | 'dead' | 'over';
-export interface Winner {
-  id: string;
-  name: string;
-}
 export interface SessionGame {
   state: GamePhase;
   mode: 'solo' | 'ffa';
@@ -16,6 +13,8 @@ export interface SessionGame {
   clockStarted: boolean;
   respawnT: number;
   respawnArm: number;
+  deathT: number;
+  overT: number;
 }
 export interface SessionScreen {
   screen: 'main' | 'online' | 'lobby';

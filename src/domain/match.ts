@@ -5,6 +5,11 @@ export const FFA_TARGET = 20;
 export const FFA_TIME = 600;
 export const RESPAWN = 2.5;
 
+export interface Winner {
+  id: string;
+  name: string;
+}
+
 export interface Score {
   name: string;
   kills: number;

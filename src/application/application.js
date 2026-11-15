@@ -4,7 +4,8 @@ import { createRuntime } from './runtime.js';
 import { createPickups } from './pickups.js';
 import { createFocus } from './focus.js';
 import { createWaves } from './waves.js';
-import { createMatch } from './match.js';
+import { MatchController } from './match.js';
+import { INK } from '../shared/ink.js';
 import { createScreens } from './screens.js';
 import { createMultiplayer } from './multiplayer.js';
 import { createControls } from './controls.js';
@@ -45,8 +46,30 @@ export function createApplication(options) {
     spawnPickup: (...args) => pickups.spawnPickup(...args),
     enterFocus: (...args) => focus.enterFocus(...args),
   });
-  const match = createMatch(runtime, {
-    endFocus: (...args) => focus.endFocus(...args),
+  const match = new MatchController({
+    player: runtime.player,
+    opponents: () => runtime.remote.values(),
+    level: () => runtime.state.level,
+    online: runtime.online,
+    finished: () => runtime.game.over !== null,
+    localName: () => runtime.state.myName,
+    remainingTime: () => runtime.state.matchLeft,
+    lobbyCode: () => String(runtime.net.aliasCode || runtime.net.code || ''),
+    boardVisible: () => !runtime.hud.el.board.hidden,
+    transport: runtime.net,
+    scores: runtime.scores,
+    hud: runtime.hud,
+    spawnFeedback: (point) => {
+      runtime.effects.strokeBurst(point, INK.BLUE, 24, 6, { life: 0.5, size: 0.03 });
+      audio.spawn(point);
+    },
+    exitLock: () => runtime.input.exitLock(),
+    endFocus: () => focus.endFocus(),
+    session: {
+      playerDied: () => session.playerDied(),
+      playerRespawned: () => session.playerRespawned(),
+      finishMatch: (winner) => session.finishMatch(winner),
+    },
   });
   const reset = new RunReset({
     state: runtime.state,

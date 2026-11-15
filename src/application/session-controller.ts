@@ -1,4 +1,5 @@
-import { FFA_TARGET, FFA_TIME } from '../domain/match.js';
+import { FFA_TARGET, FFA_TIME, RESPAWN } from '../domain/match.js';
+import type { Winner } from '../domain/match.js';
 import type { SessionPorts } from './session-contracts.js';
 
 /** Owns run/session transitions; input, screens and network request commands through composition. */
@@ -25,6 +26,21 @@ export class SessionController {
   }
   resetGame() {
     this.ports.resetRun();
+  }
+  playerDied() {
+    const { game } = this.ports;
+    if (game.mode === 'ffa') game.respawnT = RESPAWN;
+    game.state = 'dying';
+    game.deathT = 0;
+  }
+  playerRespawned() {
+    this.ports.game.state = 'play';
+  }
+  finishMatch(winner: Winner) {
+    const { game } = this.ports;
+    game.over = winner;
+    game.overT = 0;
+    game.state = 'over';
   }
   screenClick() {
     const { game, transport, screen } = this.ports;

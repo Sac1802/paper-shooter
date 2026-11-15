@@ -79,6 +79,11 @@ progress, errors and retry backoffs on replacement/leave/disposal. Host recovery
 roster and clock authority through explicit commands. Screens no longer reset gameplay or own
 menu/lobby-return transitions. See [ADR 0013](adr/0013-session-transition-ownership.md).
 
+MatchController owns checked spawn selection, death/score reports and win checks through scoped
+capabilities. It requests player-death, respawn and finish phases from SessionController; pure score
+presentation functions consume a view without DOM or transport access. Death/respawn frame timing
+still belongs to the loop. See [ADR 0016](adr/0016-match-rules-and-presentation.md).
+
 The loop keeps the original variable timestep, capped at 50 ms, hitstop and focus scaling. Input,
 simulation, death/respawn, idle/lobby updates and presentation have separate phases. Moving to a
 fixed timestep, rollback netcode or a different physics engine would change behavior and needs a
@@ -101,7 +106,7 @@ separate decision and regression baseline.
 
 TypeScript strict mode covers domain rules, shared contracts, physics/math, registry, network
 configuration/discovery, backend, model recipes, player/weapon components, enemy composition,
-session transitions, remote target/combat composition and lobby connection/recovery. Legacy procedural
+session transitions, match rules/presentation, remote target/combat composition and lobby connection/recovery. Legacy procedural
 maps/effects, transport, runtime composition and several application/presentation adapters remain
 JavaScript under `allowJs` with `checkJs: false`; those boundaries are **not** fully statically checked. Tests and
 coverage include them. This is an explicit incremental typing decision, not a completed conversion
@@ -109,8 +114,8 @@ of every source file. See [ADR 0003](adr/0003-modular-architecture.md).
 
 ## Remaining decomposition
 
-Runtime composition, combat/multiplayer message and synchronization binding, screen read models,
-settings, multiplayer message/idle/synchronization policy and match progression still need narrower
+Runtime composition, screen read models, settings, multiplayer message/idle/synchronization policy
+and death/respawn frame progression still need narrower
 checked boundaries. The enemy subsystem now has checked composition and separate behavior,
 simulation, replication and presentation owners. Extracted effects remain JavaScript, and some
 map/engine/input content still needs complexity review. File length is a review signal; splitting

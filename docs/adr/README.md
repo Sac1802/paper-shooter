@@ -21,5 +21,7 @@
 
 | [0015](0015-combat-capabilities-and-composition.md) | Scoped combat policy, feedback, reports and explicit composition | Accepted |
 
+| [0016](0016-match-rules-and-presentation.md) | Match rules, phase commands and pure score presentation | Accepted |
+
 Each decision records context, alternatives, consequences and evidence. Revisit a decision when its
 constraints change; retain superseded records so their reasoning remains available.

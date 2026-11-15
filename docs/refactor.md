@@ -54,4 +54,6 @@ gate does not close those findings or complete the remaining gameplay/controller
 - Removed mutable gameplay-context registration; checked combat policies expose explicit query,
   damage, rope, blast and prop capabilities. Fixed the reproduced cross-player guard hit-order bug
   before extraction and preserved the composed combat reference.
+- Replaced whole-runtime match access with checked capabilities and pure score presentation;
+  explicit session commands own death/respawn/finish phase writes, with pre-change rule regressions.
 - Added deterministic unit/integration tests, Chromium smoke tests, coverage imports and pinned CI actions.
