@@ -26,6 +26,7 @@ const gunBuilders = {
 const _v = new THREE.Vector3(),
   _v2 = new THREE.Vector3();
 export class Gun extends ViewModel {
+  override readonly isGun = true;
   private readonly definition: GunDefinition;
   private readonly mechanics: GunMechanics;
   readonly model: GunModel;
@@ -46,7 +47,6 @@ export class Gun extends ViewModel {
     this.adsFov = this.definition.adsFov;
     this.scope = this.definition.scope;
     this.mechanics = new GunMechanics(this.definition);
-    this.isGun = true;
     this.autoReloadTimer = null;
     this.disposed = false;
     this.mat = makeInkMaterial({ ink: INK.BLUE });

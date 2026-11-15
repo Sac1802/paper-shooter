@@ -32,6 +32,6 @@ export interface GameState extends SessionGame, WaveState {
   katanaStreak: number;
   focus: FocusState<EnemyActor>;
   hitstop(duration: number, scale: number): void;
-  addScore(points: number, label?: string): void;
+  addScore(points: number, label?: string | null): void;
   onPlayerDeath(): void;
 }

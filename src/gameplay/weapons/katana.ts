@@ -10,6 +10,7 @@ import { buildKatana } from '../../presentation/models/katana.js';
 const _v = new THREE.Vector3(),
   _v2 = new THREE.Vector3();
 export class Katana extends ViewModel {
+  override readonly isGun = false;
   readonly name: string;
   readonly hint: string;
   readonly kind = 'katana';

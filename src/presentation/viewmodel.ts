@@ -10,7 +10,7 @@ export abstract class ViewModel {
   readonly baseRot: THREE.Vector3;
   readonly aimPos: THREE.Vector3;
   adsFov: number;
-  isGun: boolean;
+  readonly isGun: boolean;
   scope?: boolean;
   readonly recoil: Spring3;
   readonly recoilRot: Spring3;

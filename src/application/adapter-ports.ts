@@ -30,7 +30,8 @@ export type ApplicationInput = PlayerServices['input'] &
   ControlPorts['input'] &
   LoopPorts['input'] &
   UserSettingsPorts['input'] &
-  MultiplayerPorts['input'] & {
+  MultiplayerPorts['input'] &
+  FocusPorts<FocusTarget>['input'] & {
     dispose?(): void;
   };
 export type ApplicationHud = PlayerPresentation['hud'] &
@@ -61,8 +62,11 @@ export type ApplicationAudio = PlayerPresentation['audio'] &
   MultiplayerPorts['audio'] &
   PickupFeedback['audio'] &
   LoopPorts['audio'] & {
+    kill(strong?: boolean): void;
     readonly ctx: object | null;
     setTune(key: string): void;
     dispose(): void;
   };
-export type ApplicationTransport = MultiplayerTransport & ScreenPorts['transport'];
+export type ApplicationTransport = MultiplayerTransport &
+  ScreenPorts['transport'] &
+  SessionPorts['transport'];

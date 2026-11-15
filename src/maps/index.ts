@@ -8,8 +8,8 @@ import { buildMexico } from './mexico.js';
 export { LEVELS } from '../domain/maps.js';
 
 export type MapKit = ReturnType<typeof createBuilder>;
-export type Level = MapKit['L'];
-export type MapBuilder = (kit: MapKit, arena?: boolean) => Level;
+export type Level = Omit<MapKit['L'], 'key'> & { key: MapKey };
+export type MapBuilder = (kit: MapKit, arena?: boolean) => MapKit['L'];
 
 // Adding a map key requires a builder here; each map uses the same construction contract.
 const builders: Record<MapKey, MapBuilder> = { district: buildDistrict, mexico: buildMexico };
@@ -19,5 +19,7 @@ export function buildLevel(
   key = 'district',
   opts: { arena?: boolean } = {},
 ): Level {
-  return builders[knownMap(key)](createBuilder(scene, world), !!opts.arena);
+  const mapKey = knownMap(key);
+  const level = builders[mapKey](createBuilder(scene, world), !!opts.arena);
+  return Object.assign(level, { key: mapKey });
 }

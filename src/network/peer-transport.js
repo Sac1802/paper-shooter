@@ -55,6 +55,7 @@ export class Net {
     this.onAlias = null;
     this.maxPlayers = MAX_PLAYERS;
     this.accepting = true;
+    this.inMatch = false;
     this.hostName = '';
     this.stats = { sent: 0, recv: 0 };
     this.isPublic = false;

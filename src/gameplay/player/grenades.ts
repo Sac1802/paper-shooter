@@ -9,8 +9,8 @@ export interface GrenadePose {
   velocity: Vector3;
 }
 export interface GrenadePacket {
-  pos: number[];
-  vel: number[];
+  pos: [number, number, number];
+  vel: [number, number, number];
 }
 export interface GrenadeVisualPort {
   create(position: Vector3): Object3D;
@@ -99,9 +99,9 @@ export class Grenades {
       this.stock--;
       this.cooldown = 0.55;
       this.launch(charge, pose, pos, vel);
-      const packet = {
-        pos: pos.toArray().map((v) => +v.toFixed(2)),
-        vel: vel.toArray().map((v) => +v.toFixed(2)),
+      const packet: GrenadePacket = {
+        pos: [+pos.x.toFixed(2), +pos.y.toFixed(2), +pos.z.toFixed(2)],
+        vel: [+vel.x.toFixed(2), +vel.y.toFixed(2), +vel.z.toFixed(2)],
       };
       this.feedback.thrown(packet);
       this.onThrow?.(packet);

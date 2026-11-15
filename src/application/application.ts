@@ -1,3 +1,5 @@
+import type { ApplicationOptions } from './contracts.js';
+import type { ApplicationDebug, DebugCommands } from './application-debug.js';
 import { SessionController } from './session-controller.js';
 import { RunReset } from './run-reset.js';
 import { createRuntime } from './runtime.js';
@@ -17,13 +19,12 @@ import { createControls } from './controls.js';
 import { createLoop } from './frame-composition.js';
 
 // Callbacks connect controllers explicitly; factories register callbacks but do not start the loop.
-/** @param {import('./contracts.js').ApplicationOptions} options */
-export function createApplication(options) {
+export function createApplication(options: ApplicationOptions) {
   const runtime = createRuntime(options, {
     spawnPickup: (...args) => pickups.spawnPickup(...args),
   });
   const audio = runtime.audio;
-  const debug = {
+  const debug: ApplicationDebug = {
     ...runtime,
     get level() {
       return runtime.state.level;
@@ -274,7 +275,7 @@ export function createApplication(options) {
     session,
   );
   // Keep the existing development/browser automation API in the composition root.
-  Object.assign(debug, {
+  const debugCommands: DebugCommands = {
     startWave: (wave) => waves.startWave(wave),
     updateWaves: (dt) => waves.updateWaves(dt),
     begin: () => session.begin(),
@@ -291,7 +292,8 @@ export function createApplication(options) {
     quickPlay: () => multiplayer.quickPlay(),
     leaveOnline: (...args) => multiplayer.leaveOnline(...args),
     hostStart: () => session.hostStart(),
-  });
+  };
+  Object.assign(debug, debugCommands);
   const loop = createLoop(
     {
       game: runtime.game,
@@ -313,7 +315,7 @@ export function createApplication(options) {
       },
       toggleMusic: () => runtime.userSettings.toggleMusic(),
       boardVisible: () => !runtime.hud.el.board.hidden,
-      screenClick: () => runtime.hud.onScreenClick(),
+      screenClick: () => runtime.hud.onScreenClick?.(),
     },
     {
       resume: (...args) => session.resume(...args),
