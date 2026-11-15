@@ -93,6 +93,7 @@ export function createApplication(options) {
       start: () => screens.showStart(),
       pause: () => screens.showPause(),
       clickToPlay: () => screens.showClickToPlay(),
+      dead: () => screens.showDead(),
     },
     transport: runtime.net,
     lobby: runtime.lobby,
@@ -107,6 +108,7 @@ export function createApplication(options) {
     arenaSpawn: () => match.arenaSpawn(),
     sendScores: () => match.sendScores(),
     refreshScores: () => match.refreshScoreHud(),
+    respawnLocal: () => match.respawnLocal(),
   });
   const screens = createScreens(runtime, {
     cancelPending: () => multiplayer.cancelPending(),
@@ -197,8 +199,7 @@ export function createApplication(options) {
     netUpdate: (...args) => multiplayer.netUpdate(...args),
     updateWaves: (...args) => waves.updateWaves(...args),
     updateArenaPickups: (...args) => pickups.updateArenaPickups(...args),
-    respawnLocal: (...args) => match.respawnLocal(...args),
-    showDead: (...args) => screens.showDead(...args),
+    updateDeath: (phase, dt) => session.updateDeath(phase, dt),
     toLobbyScreen: (...args) => session.toLobbyScreen(...args),
   });
 

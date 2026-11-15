@@ -1,11 +1,26 @@
 import { FFA_TARGET, FFA_TIME, RESPAWN } from '../domain/match.js';
 import type { Winner } from '../domain/match.js';
 import type { SessionPorts } from './session-contracts.js';
+import { DeathProgress } from './death-progress.js';
+import type { GamePhase } from '../domain/match.js';
 
 /** Owns run/session transitions; input, screens and network request commands through composition. */
 export class SessionController {
   private prompt: ReturnType<typeof setTimeout> | null = null;
-  constructor(private readonly ports: SessionPorts) {}
+  private readonly death: DeathProgress;
+  constructor(private readonly ports: SessionPorts) {
+    this.death = new DeathProgress({
+      state: ports.game,
+      input: ports.input,
+      hud: ports.hud,
+      respawn: () => ports.respawnLocal(),
+      soloReady: () => {
+        ports.game.state = 'dead';
+        ports.presentation.dead();
+        ports.input.exitLock();
+      },
+    });
+  }
   dispose() {
     this.cancelPrompt();
   }
@@ -36,6 +51,9 @@ export class SessionController {
   }
   playerRespawned() {
     this.ports.game.state = 'play';
+  }
+  updateDeath(phase: GamePhase, dt: number) {
+    this.death.update(phase, dt);
   }
   finishMatch(winner: Winner) {
     const { game } = this.ports;

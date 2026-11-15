@@ -81,8 +81,9 @@ menu/lobby-return transitions. See [ADR 0013](adr/0013-session-transition-owners
 
 MatchController owns checked spawn selection, death/score reports and win checks through scoped
 capabilities. It requests player-death, respawn and finish phases from SessionController; pure score
-presentation functions consume a view without DOM or transport access. Death/respawn frame timing
-still belongs to the loop. See [ADR 0016](adr/0016-match-rules-and-presentation.md).
+presentation functions consume a view without DOM or transport access. Session-owned DeathProgress
+advances death/respawn timers and input readiness; the loop supplies its captured frame phase and
+real delta. See [ADR 0016](adr/0016-match-rules-and-presentation.md).
 
 The loop keeps the original variable timestep, capped at 50 ms, hitstop and focus scaling. Input,
 simulation, death/respawn, idle/lobby updates and presentation have separate phases. Moving to a
@@ -114,8 +115,8 @@ of every source file. See [ADR 0003](adr/0003-modular-architecture.md).
 
 ## Remaining decomposition
 
-Runtime composition, screen read models, settings, multiplayer message/idle/synchronization policy
-and death/respawn frame progression still need narrower
+Runtime composition, screen read models, settings, wave/focus/pickup controllers and multiplayer
+message/idle/synchronization policy still need narrower
 checked boundaries. The enemy subsystem now has checked composition and separate behavior,
 simulation, replication and presentation owners. Extracted effects remain JavaScript, and some
 map/engine/input content still needs complexity review. File length is a review signal; splitting

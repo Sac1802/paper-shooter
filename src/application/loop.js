@@ -15,8 +15,7 @@ export function createLoop(runtime, actions = {}) {
     netUpdate,
     updateWaves,
     updateArenaPickups,
-    respawnLocal,
-    showDead,
+    updateDeath,
     toLobbyScreen,
   } = actions;
   // ---------------- loop ----------------
@@ -120,41 +119,6 @@ export function createLoop(runtime, actions = {}) {
     if (game.comboT <= 0) {
       game.combo = 0;
       hud.setScore(game.score, 0);
-    }
-  }
-
-  function updateRespawn(dt) {
-    const before = Math.ceil(game.respawnT);
-    game.respawnT -= dt;
-    const left = Math.ceil(game.respawnT);
-    if (left > 0) {
-      if (left !== before || game.deathT <= dt)
-        hud.message(String(left), 'back on the page in', 1.1);
-      return;
-    }
-    if (before > 0) {
-      game.respawnArm = input.lastActive;
-      game.promptT = 0;
-      return;
-    }
-    if (game.menu) return;
-    game.promptT -= dt;
-    if (game.promptT <= 0) {
-      game.promptT = 1.4;
-      hud.message('READY', `press ${hud.key('confirm')} · any button or click to respawn`, 1.5);
-    }
-    if (input.lastActive !== game.respawnArm && !input.pressed('pause') && !input.down('pause'))
-      respawnLocal();
-  }
-
-  function updateDeath(st, dt) {
-    if (st !== 'dying') return;
-    game.deathT += dt;
-    if (online()) updateRespawn(dt);
-    else if (game.deathT > 1.7) {
-      game.state = 'dead';
-      showDead();
-      input.exitLock();
     }
   }
 

@@ -1,19 +1,16 @@
 import type { Vector3 } from 'three';
 import type { EnemyKind } from '../domain/enemies.js';
 import type { MapKey } from '../domain/maps.js';
-import type { Score, Winner } from '../domain/match.js';
-export type { Winner } from '../domain/match.js';
+import type { Score, Winner, GamePhase } from '../domain/match.js';
+import type { DeathState, DeathInput } from './death-progress.js';
+export type { Winner, GamePhase } from '../domain/match.js';
 
-export type GamePhase = 'start' | 'lobby' | 'play' | 'pause' | 'dying' | 'dead' | 'over';
-export interface SessionGame {
+export interface SessionGame extends DeathState {
   state: GamePhase;
   mode: 'solo' | 'ffa';
   menu: boolean;
   over: Winner | null;
   clockStarted: boolean;
-  respawnT: number;
-  respawnArm: number;
-  deathT: number;
   overT: number;
 }
 export interface SessionScreen {
@@ -25,10 +22,9 @@ export interface SessionScreen {
   clockT: number;
   clockRunning: boolean;
 }
-export interface SessionInput {
+export interface SessionInput extends DeathInput {
   readonly usingGamepad: boolean;
   readonly pointerLocked: boolean;
-  readonly lastActive: number;
   requestLock(): void;
   exitLock(): void;
 }
@@ -51,6 +47,7 @@ export interface SessionPresentation {
   start(): void;
   pause(): void;
   clickToPlay(): void;
+  dead(): void;
 }
 export interface SessionTransport {
   readonly id: string | null;
@@ -79,6 +76,7 @@ export interface SessionPorts {
   arenaSpawn(): Vector3;
   sendScores(): void;
   refreshScores(): void;
+  respawnLocal(): void;
 }
 export interface RunGame {
   boss: { alive: boolean } | null;

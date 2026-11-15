@@ -56,4 +56,6 @@ gate does not close those findings or complete the remaining gameplay/controller
   before extraction and preserved the composed combat reference.
 - Replaced whole-runtime match access with checked capabilities and pure score presentation;
   explicit session commands own death/respawn/finish phase writes, with pre-change rule regressions.
+- Moved death/respawn timing, prompts and fresh-input gating out of the loop into a checked
+  session-owned component; corrected a reproduced winning-host-death transition separately.
 - Added deterministic unit/integration tests, Chromium smoke tests, coverage imports and pinned CI actions.

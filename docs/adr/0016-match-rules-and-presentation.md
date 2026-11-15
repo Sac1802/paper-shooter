@@ -18,8 +18,10 @@ roster; the controller retains no obsolete level collection or concrete actor/tr
 
 SessionController accepts explicit player-death, respawn and match-finish commands and owns those
 phase writes and initial timers. The match controller preserves the order of report, score, phase
-and feedback operations. Frame-by-frame death/respawn timing remains in the loop for a subsequent
-ownership pass; this change does not centralize every phase transition yet.
+and feedback operations. DeathProgress advances solo death and online respawn/countdown/readiness
+timers through scoped state, input, feedback and semantic completion commands. SessionController
+owns it and applies the resulting phase changes. The loop supplies its captured frame phase and
+unscaled delta after simulation; it no longer writes phases or runs respawn policy.
 
 Pure presentation functions format leaders, the board and results from a score view. They escape
 untrusted labels and have no transport, application, DOM or phase mutation dependency. Match HUD
@@ -51,3 +53,5 @@ A subsequent regression reproduced the host's winning-death report replacing the
 with `dying`: score handling finished the match before the pending local-death transition. A
 separate correction makes the completed match take precedence over that death transition. Its
 integration test follows actual lethal damage through the winning score and subsequent frames.
+Five isolated death-progress tests also cover the strict solo delay, countdown zero crossing,
+input arming, menu gating, held/pressed pause and readiness-prompt cadence.

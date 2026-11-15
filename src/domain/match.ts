@@ -5,6 +5,8 @@ export const FFA_TARGET = 20;
 export const FFA_TIME = 600;
 export const RESPAWN = 2.5;
 
+export type GamePhase = 'start' | 'lobby' | 'play' | 'pause' | 'dying' | 'dead' | 'over';
+
 export interface Winner {
   id: string;
   name: string;

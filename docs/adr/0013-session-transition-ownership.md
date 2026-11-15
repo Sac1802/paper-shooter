@@ -27,6 +27,9 @@ also outlived leaving/disposal, and the match pointer-lock prompt had no owner t
 - The session controller owns the delayed pointer-lock prompt. Beginning another session,
   returning to a menu/lobby, leaving online play and disposal cancel it. Presentation renders a
   request; it does not own the timer or decide the transition.
+- DeathProgress advances death/respawn timers, prompt cadence and fresh-input eligibility using
+  real frame delta. SessionController applies its resulting phase changes; the loop only supplies
+  the captured frame phase after simulation. See [ADR 0016](0016-match-rules-and-presentation.md).
 - SessionTasks owns an async session generation. Leaving, replacing pending work or disposal
   invalidates previous completions/progress/errors and settles cancelled backoff waits immediately.
   A finished migration retains its generation for later alias reclamation until cancellation.
