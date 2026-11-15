@@ -109,3 +109,20 @@ it('applies received clocks only on followers and gives no expiry authority to a
   expect(ports.transport.send).not.toHaveBeenCalled();
   expect(ports.game.over).toBeNull();
 });
+it('waits for a hosting identity before claiming an expired clock during recovery', () => {
+  const { ports, owner, events } = clockFixture();
+  ports.transport = { ...ports.transport, id: null };
+  ports.opponentCount = () => 1;
+  ports.state.matchLeft = 0;
+  ports.sortedScores = () => [['previous-player', { name: 'paper', kills: 3, deaths: 0 }]];
+  owner.update(0.1);
+  expect(ports.game.over).toBeNull();
+  expect(events).not.toContainEqual(['end', { id: 'previous-player', name: 'paper' }]);
+  ports.transport = { ...ports.transport, id: 'new-host' };
+  ports.sortedScores = () => [['new-host', { name: 'paper', kills: 3, deaths: 0 }]];
+  owner.update(0);
+  expect(events.slice(-2)).toEqual([
+    ['end', { id: 'new-host', name: 'paper' }],
+    ['result', { id: 'new-host', name: 'paper' }],
+  ]);
+});

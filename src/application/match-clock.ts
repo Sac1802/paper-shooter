@@ -48,15 +48,13 @@ export class MatchClock {
   }
   private finish() {
     const { sortedScores, transport, localName, end } = this.ports;
+    const id = transport.id;
+    // Hosting may be elected before the replacement endpoint has opened.
+    if (id === null) return;
     const first = sortedScores()[0];
-    // An active host always has an identity; a disconnected clock has no result authority.
-    let winner: Winner;
-    if (first) winner = { id: first[0], name: first[1].name };
-    else {
-      const id = transport.id;
-      if (id === null) return;
-      winner = { id, name: localName() };
-    }
+    const winner: Winner = first
+      ? { id: first[0], name: first[1].name }
+      : { id, name: localName() };
     transport.send('end', winner);
     end(winner);
   }
