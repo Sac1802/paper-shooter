@@ -10,7 +10,8 @@ import { EnemyRewards } from './enemy-rewards.js';
 import { MatchController } from './match.js';
 import { INK } from '../shared/ink.js';
 import { presentPickup } from '../presentation/pickups.js';
-import { createScreens } from './screens.js';
+import { ScreenController } from './screens.js';
+import { BrowserScreens } from '../presentation/screen-bindings.js';
 import { createMultiplayer } from './multiplayer.js';
 import { createControls } from './controls.js';
 import { createLoop } from './loop.js';
@@ -81,11 +82,8 @@ export function createApplication(options) {
   const waves = new WaveController({
     state: runtime.game,
     level: () => runtime.state.level,
-    checkpoint: () => runtime.state.checkpoint,
-    saveCheckpoint: (wave) => {
-      runtime.state.checkpoint = wave;
-      runtime.preferences.write('checkpoint', String(wave));
-    },
+    checkpoint: () => runtime.progress.checkpoint,
+    saveCheckpoint: (wave) => runtime.progress.saveCheckpoint(wave),
     player: runtime.player,
     enemies: runtime.enemies,
     world: runtime.world,
@@ -184,22 +182,32 @@ export function createApplication(options) {
     respawnLocal: () => match.respawnLocal(),
   });
   const settingsPanel = new SettingsPanel(runtime.state, runtime.userSettings);
-  const screens = createScreens(runtime, {
-    settingsPanel,
-    cancelPending: () => multiplayer.cancelPending(),
-    lobbyRows: (...args) => multiplayer.lobbyRows(...args),
-    friendlyError: (...args) => multiplayer.friendlyError(...args),
-    quickPlay: (...args) => multiplayer.quickPlay(...args),
-    createLobby: (...args) => multiplayer.createLobby(...args),
-    setStatus: (...args) => multiplayer.setStatus(...args),
-    joinLobby: (...args) => multiplayer.joinLobby(...args),
-    broadcastLobby: (...args) => multiplayer.broadcastLobby(...args),
-    hostStart: (...args) => session.hostStart(...args),
-    leaveOnline: (...args) => multiplayer.leaveOnline(...args),
-    beginAtWave: (...args) => session.beginAtWave(...args),
-    begin: (...args) => session.begin(...args),
-    sortedScores: (...args) => match.sortedScores(...args),
-    toMainMenu: () => session.toMainMenu(),
+  const screens = new ScreenController({
+    navigation: runtime.state,
+    profile: runtime.state,
+    game: runtime.game,
+    lobby: runtime.lobby,
+    transport: runtime.net,
+    records: runtime.progress,
+    view: new BrowserScreens(runtime.hud, settingsPanel),
+    online: runtime.online,
+    selectMap: (map) => runtime.userSettings.selectMap(map),
+    actions: {
+      cancelPending: () => multiplayer.cancelPending(),
+      lobbyRows: (...args) => multiplayer.lobbyRows(...args),
+      friendlyError: (...args) => multiplayer.friendlyError(...args),
+      quickPlay: (...args) => multiplayer.quickPlay(...args),
+      createLobby: (...args) => multiplayer.createLobby(...args),
+      setStatus: (...args) => multiplayer.setStatus(...args),
+      joinLobby: (...args) => multiplayer.joinLobby(...args),
+      broadcastLobby: (...args) => multiplayer.broadcastLobby(...args),
+      hostStart: (...args) => session.hostStart(...args),
+      leaveOnline: (...args) => multiplayer.leaveOnline(...args),
+      beginAtWave: (...args) => session.beginAtWave(...args),
+      begin: (...args) => session.begin(...args),
+      sortedScores: (...args) => match.sortedScores(...args),
+      toMainMenu: () => session.toMainMenu(),
+    },
   });
   const multiplayer = createMultiplayer(runtime, {
     renderLobby: (...args) => screens.renderLobby(...args),

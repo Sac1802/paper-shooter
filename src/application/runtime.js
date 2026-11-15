@@ -1,5 +1,6 @@
 import { createCombat } from './combat.js';
 import { UserSettings } from './user-settings.js';
+import { RunProgress } from './run-progress.js';
 import { InkRenderer } from '../presentation/renderer.js';
 import { World } from '../engine/physics.js';
 import { Input } from '../platform/input.js';
@@ -42,6 +43,7 @@ export function createRuntime(options, actions) {
     pickups: [],
     pickupClock: 0,
   };
+  const progress = new RunProgress(state, preferences);
   state.level = buildLevel(R.scene, world, state.mapKey, { arena: false });
   state.nav = new NavGrid(world, state.level.bounds, 1).build();
   const input = options.input ?? new Input(canvas);
@@ -283,5 +285,6 @@ export function createRuntime(options, actions) {
     setArena,
     applySettings,
     userSettings,
+    progress,
   };
 }

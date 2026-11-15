@@ -36,7 +36,7 @@ settings implementations would retain duplicated persistence policy. A general r
 unnecessary for these synchronous commands and would not decide which owner changes a preference.
 The small checked owner and browser adapter retain existing save formats and event behavior.
 
-Composition adds one SettingsPanel construction/mapping: `application.js` is now 323 physical /
+At settings extraction, one SettingsPanel construction/mapping gives `application.js` 323 physical /
 318 code lines, with a 302-code-line factory. The reviewed temporary composition exception in
 [ADR 0019](0019-focus-policy-motion-and-marker.md) still covers only explicit wiring, development
 API and disposal. No new settings calculations move into that factory. Its unchecked typing,
@@ -52,6 +52,7 @@ updates. They pass after extraction with screen/application, focus and weapon re
 isolated panel tests cover menu-event isolation and binding screens without settings/name fields.
 Existing initial save loading and procedural random draws are unchanged.
 
-The rest of screen routing, map/best state, lobby browsing, multiplayer/frame binding and runtime
-composition remains unchecked JavaScript. Input/HUD/audio/transport options still name concrete
+Screen routing, map/best state and lobby browsing subsequently gained checked owners in
+[ADR 0021](0021-screen-policy-view-and-browse-lifetime.md). Multiplayer/frame binding and runtime
+composition remain unchecked JavaScript. Input/HUD/audio/transport options still name concrete
 adapters; replacing the preference option alone does not close R2 or R5.

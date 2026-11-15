@@ -73,6 +73,10 @@ export function lobbyListHTML(view: LobbyListView) {
     .join('');
 }
 
+export function lobbyErrorHTML(message: string) {
+  return `<div class="hint">could not look: ${esc(message)}</div>`;
+}
+
 export function menuBtnHTML() {
   return '<div class="online menubtn"><div class="row"><button type="button" class="alt" id="menuBtn">MAIN MENU</button></div></div>';
 }

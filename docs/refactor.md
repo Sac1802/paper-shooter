@@ -66,4 +66,7 @@ gate does not close those findings or complete the remaining gameplay/controller
   projection owner; preserved the recorded two-execution chain and collision/feedback behavior.
 - Centralized look/music/name edits in a checked settings owner and a DOM-only settings adapter;
   replaced the concrete preferences option with a structural loading/writing contract.
+- Replaced screen runtime access with checked navigation/read models, pure views, DOM intent
+  binding, browse lifetime/cache and persisted record owners; fixed late lookup publication on
+  disposal separately and preserved the eleven-state screen reference.
 - Added deterministic unit/integration tests, Chromium smoke tests, coverage imports and pinned CI actions.

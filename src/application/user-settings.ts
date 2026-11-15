@@ -1,6 +1,10 @@
 import type { SavedPreferences, PreferencePort } from '../platform/preferences.js';
+import type { MapKey } from '../domain/maps.js';
 
-export type UserSettingsState = Pick<SavedPreferences, 'settings' | 'musicWanted' | 'myName'>;
+export type UserSettingsState = Pick<
+  SavedPreferences,
+  'settings' | 'musicWanted' | 'myName' | 'mapKey'
+>;
 export interface UserSettingsPorts {
   state: UserSettingsState;
   preferences: Pick<PreferencePort, 'write'>;
@@ -46,5 +50,9 @@ export class UserSettings {
     preferences.write('name', state.myName);
     player.name = state.myName;
     transport.hostName = state.myName;
+  }
+  selectMap(map: MapKey) {
+    this.ports.state.mapKey = map;
+    this.ports.preferences.write('map', map);
   }
 }
