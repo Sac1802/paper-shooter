@@ -186,6 +186,7 @@ export function createRuntime(options) {
     died: () => game.onPlayerDeath(),
   }));
   player.name = state.myName;
+  ctx.remoteServices = { scene: R.scene, resources, effects, localEye: () => player.eye };
   const net = options.net ?? new Net();
   const remote = new Map();
   const lobby = {

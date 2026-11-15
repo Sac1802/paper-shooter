@@ -66,7 +66,7 @@ export function createMultiplayer(runtime, actions = {}) {
       r.name = name;
       return r;
     }
-    const rp = new RemotePlayer(ctx, id, name, 0, INK.RED);
+    const rp = new RemotePlayer(ctx.remoteServices, id, name, 0, INK.RED);
     rp.onDamage = (t, amount, fromPos) => {
       if (!ctx.canHurt(t) || !t.alive) return;
       hud.hitmarker(false, false);

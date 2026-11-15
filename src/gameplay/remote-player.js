@@ -26,43 +26,18 @@ const HIT = [
   ['shinR', 0.11],
 ];
 
-// what a player broadcasts about itself, ~20 times a second:
-// position, look, weapon, state flags, hp, velocity and (while grappling) where the hook is
-export function encodeLocal(P, weaponIndex, extra = {}) {
-  const b = P.body;
-  const g = P.grapple;
-  const grappling = g && g.state !== 'idle';
-  const out = [
-    +b.pos.x.toFixed(2),
-    +b.pos.y.toFixed(2),
-    +b.pos.z.toFixed(2),
-    +P.yaw.toFixed(2),
-    +P.pitch.toFixed(2),
-    weaponIndex,
-    (P.crouching ? 1 : 0) |
-      (P.sliding ? 2 : 0) |
-      (P.isBlocking ? 4 : 0) |
-      (P._aiming ? 8 : 0) |
-      (b.onGround ? 16 : 0) |
-      (extra.firing ? 32 : 0) |
-      (P.alive ? 64 : 0) |
-      (grappling ? 128 : 0) |
-      (P.parryWindow ? 256 : 0) |
-      (extra.idle ? 512 : 0) |
-      (extra.untouched ? 1024 : 0) |
-      (extra.away ? 2048 : 0),
-    Math.round(P.hp),
-    +b.vel.x.toFixed(1),
-    +b.vel.y.toFixed(1),
-    +b.vel.z.toFixed(1),
-  ];
-  if (grappling) out.push(+g.hook.x.toFixed(1), +g.hook.y.toFixed(1), +g.hook.z.toFixed(1));
-  return out;
-}
+export { encodeLocal } from '../domain/player-snapshots.js';
 
 export class RemotePlayer {
-  constructor(ctx, id, name, team, ink) {
-    this.ctx = ctx;
+  /**
+   * @param {import('./remote/services.js').RemoteServices} services
+   * @param {string} id
+   * @param {string} name
+   * @param {number} team
+   * @param {number} ink
+   */
+  constructor(services, id, name, team, ink) {
+    this.services = services;
     this.id = id;
     this.name = name || 'paper';
     this.team = team;
@@ -107,7 +82,7 @@ export class RemotePlayer {
     this.score = 0;
     this.mat = makeInkMaterial({ ink, shadeScale: 0, shadeBias: 1 });
     this.solid = makeInkMaterial({ ink: INK.BLACK, fill: true, side: THREE.DoubleSide });
-    this.releaseMaterials = ctx.resources.retain([this.mat, this.solid]);
+    this.releaseMaterials = services.resources.retain([this.mat, this.solid]);
     this.T = {
       weapon: 'rifle',
       scale: 1.0,
@@ -127,15 +102,15 @@ export class RemotePlayer {
       makeInkMaterial({ ink: INK.BLACK }),
     );
     this.rope.visible = false;
-    ctx.scene.add(this.rope);
-    ctx.resources.track(this.rope);
+    services.scene.add(this.rope);
+    services.resources.track(this.rope);
     this.hook = new THREE.Mesh(
       new THREE.SphereGeometry(0.12, 6, 5),
       makeInkMaterial({ ink: INK.BLACK, fill: true }),
     );
     this.hook.visible = false;
-    ctx.scene.add(this.hook);
-    ctx.resources.track(this.hook);
+    services.scene.add(this.hook);
+    services.resources.track(this.hook);
   }
   _buildModel() {
     const model = buildHumanoid(this.mat, this.solid, this.T);
@@ -144,7 +119,7 @@ export class RemotePlayer {
     this.J = model.J;
     this.face = model.face;
     this.root.visible = false;
-    this.ctx.scene.add(this.root);
+    this.services.scene.add(this.root);
     this.weaponIndex = -1;
     // a name tag: a little flag above the head so you know who is who
     this.tagG = new THREE.Group();
@@ -156,15 +131,15 @@ export class RemotePlayer {
     );
     this.tagG.add(flag);
     this.corpse = false;
-    this.ctx.resources.track(this.root);
+    this.services.resources.track(this.root);
   }
   // knocked flat with some physics: the whole figure tumbles away as debris (bits come off on a
   // big hit), and a fresh figure is drawn when the player comes back
   ragdoll(dir, over) {
     if (this.corpse) return;
     this.corpse = true;
-    const eff = this.ctx.effects,
-      scene = this.ctx.scene,
+    const eff = this.services.effects,
+      scene = this.services.scene,
       J = this.J;
     this.tagG.visible = false;
     this.rope.visible = false;
@@ -241,9 +216,9 @@ export class RemotePlayer {
     if (i === this.weaponIndex && this.J.gun.children.length) return;
     this.weaponIndex = i;
     const gun = this.J.gun;
-    while (gun.children.length) this.ctx.resources.release(gun.children[0]);
+    while (gun.children.length) this.services.resources.release(gun.children[0]);
     buildWeaponProp(gun, this.mat, this.solid, { weapon: WEAPON_KINDS[i] || 'rifle' });
-    this.ctx.resources.track(gun);
+    this.services.resources.track(gun);
   }
   push(snap, t) {
     if (!snap) return;
@@ -433,19 +408,15 @@ export class RemotePlayer {
     J.torso.rotation.y = -0.3 * aim;
     J.hips.position.y = (this.crouching ? 0.55 : 0.86) + Math.abs(c) * 0.07 * w;
     J.headG.rotation.x = clamp(-this.pitch, -0.7, 0.7) * 0.7;
+    const localEye = this.services.localEye();
     this.tagG.rotation.y =
       -this.root.rotation.y +
-      (this.ctx.player
-        ? Math.atan2(
-            this.ctx.player.eye.x - this.body.pos.x,
-            this.ctx.player.eye.z - this.body.pos.z,
-          )
-        : 0);
+      (localEye ? Math.atan2(localEye.x - this.body.pos.x, localEye.z - this.body.pos.z) : 0);
   }
   dispose() {
-    if (this.root) this.ctx.resources.release(this.root);
-    this.ctx.resources.release(this.rope);
-    this.ctx.resources.release(this.hook);
+    if (this.root) this.services.resources.release(this.root);
+    this.services.resources.release(this.rope);
+    this.services.resources.release(this.hook);
     this.releaseMaterials();
   }
 }

@@ -145,7 +145,7 @@ describe('weapons and multiplayer models', () => {
   it('round trips snapshots, animates remote states and reconstructs a respawned model', () => {
     fixture = applicationFixture();
     const { ctx, player } = fixture;
-    const remote = new RemotePlayer(ctx, 'other', 'other', 0, INK.RED);
+    const remote = new RemotePlayer(ctx.remoteServices, 'other', 'other', 0, INK.RED);
     player.body.pos.set(2, 0, 3);
     player.body.vel.set(2, 1, 0);
     player.grapple.state = 'on';
