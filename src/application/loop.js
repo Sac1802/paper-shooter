@@ -1,5 +1,6 @@
-import { FOCUS_SCALE, KATANA_CHARGE_KILLS } from '../domain/focus.js';
-import { clamp } from '../engine/math.js';
+import { FOCUS_SCALE } from '../domain/focus.js';
+import { FrameInteraction } from './frame-interaction.js';
+import { FramePresentation } from '../presentation/frame.js';
 
 export function createLoop(runtime, actions = {}) {
   const audio = runtime.audio;
@@ -20,9 +21,33 @@ export function createLoop(runtime, actions = {}) {
   } = actions;
   // ---------------- loop ----------------
   let last = performance.now(),
-    boardToggle = false,
-    lockTipT = 0.5,
     musicHealT = 2;
+  const interaction = new FrameInteraction({
+    input,
+    hud,
+    online,
+    menuOpen: () => game.menu,
+    screenClick: () => hud.onScreenClick(),
+    resume,
+    pause,
+    toggleMusic: () => userSettings.toggleMusic(),
+    boardVisible: () => !hud.el.board.hidden,
+    boardHTML,
+  });
+  const presentation = new FramePresentation({
+    game,
+    player,
+    hud,
+    audio,
+    renderer: R,
+    animations: () => runtime.state.level.animated,
+    online,
+    enemiesAlive: () => enemies.alive,
+    remoteCount: () => remote.size,
+    clearBoss: () => {
+      game.boss = null;
+    },
+  });
   function tick(now) {
     if (!running) return;
     frameId = requestAnimationFrame(tick);
@@ -30,57 +55,6 @@ export function createLoop(runtime, actions = {}) {
   }
   // browsers starve animation frames in hidden tabs; a host that alt-tabs would freeze everyone's
   // match, so a coarse timer runs extra steps (never extra frame chains) while that happens
-  function handleMenuInput(st) {
-    if (['start', 'pause', 'dead', 'over'].includes(st)) {
-      if (
-        input.pressed('jump') ||
-        input.pressed('confirm') ||
-        (st === 'pause' && input.pressed('pause'))
-      )
-        hud.onScreenClick();
-      return;
-    }
-    if ((st === 'play' || (st === 'dying' && online())) && input.pressed('pause')) {
-      if (game.menu) resume();
-      else {
-        pause();
-        input.exitLock();
-      }
-      return;
-    }
-    if (
-      (st === 'play' || st === 'dying') &&
-      game.menu &&
-      (input.pressed('jump') || input.pressed('confirm'))
-    )
-      resume();
-  }
-
-  function updateMusicInput() {
-    if (!input.pressed('music')) return;
-    const wanted = userSettings.toggleMusic();
-    hud.tip(wanted ? 'music on' : 'music off', 1.5);
-  }
-
-  function updateBoard(playing) {
-    if (!online() || !playing) {
-      boardToggle = false;
-      return;
-    }
-    if (input.usingGamepad && input.pressed('score')) boardToggle = !boardToggle;
-    const want = ((input.down('score') && !input.usingGamepad) || boardToggle) && !game.menu;
-    if (want !== !hud.el.board.hidden) hud.setBoard(want ? boardHTML() : null);
-  }
-
-  function updateCursorHint(st, dt) {
-    if (st !== 'play' || game.menu || input.pointerLocked || input.usingGamepad) return;
-    lockTipT -= dt;
-    if (lockTipT <= 0) {
-      lockTipT = 2.5;
-      hud.tip('click the page to grab the mouse', 2);
-    }
-  }
-
   function timeScale(dt) {
     if (game.hitstopT > 0) {
       game.hitstopT -= dt;
@@ -149,59 +123,6 @@ export function createLoop(runtime, actions = {}) {
     } else if (!net.isHost && game.overT > 15) toLobbyScreen();
   }
 
-  function updateBossHud() {
-    if (!game.boss) return;
-    if (game.boss.alive) hud.setBoss(game.boss.T.name, game.boss.hp / game.boss.maxHp);
-    else {
-      hud.setBoss(null, null);
-      game.boss = null;
-    }
-  }
-
-  function updateHud(playing, dt) {
-    const weapon = player.weapon;
-    if (weapon.isGun) hud.setAmmo(weapon.mag, weapon.reserve, weapon.magSize, weapon.reloading);
-    else hud.setKatana();
-    hud.setSlots(
-      player.weapons.map((item, index) => ({
-        name: item.name,
-        active: index === player.weaponIndex,
-        ammo: item.isGun ? item.mag + '/' + item.reserve : '∞',
-        empty: item.isGun && item.mag === 0 && item.reserve === 0,
-      })),
-    );
-    hud.setGrenades(player.grenades);
-    hud.setGrappleStamina(player.grapStam);
-    hud.setHealth(player.hp, player.maxHp);
-    hud.setSpread(weapon.spreadPx);
-    hud.update(dt);
-    if (online()) hud.setFocusMeter(playing, player.grapStam, false, 'GRAPPLE');
-    else
-      hud.setFocusMeter(
-        playing && (weapon.kind === 'katana' || game.katanaStreak > 0 || game.focus.active),
-        game.focus.active ? 1 : clamp(game.katanaStreak / KATANA_CHARGE_KILLS, 0, 1),
-        game.focus.active,
-        'KATANA',
-      );
-    updateBossHud();
-  }
-
-  function present(playing, dt, scale) {
-    for (const animation of runtime.state.level.animated) animation.update(game.time);
-    audio.setListener(player.eye, player.right);
-    updateHud(playing, dt);
-    audio.setIntensity(
-      clamp((enemies.alive + game.queue.length + remote.size * 2) / 12, 0, 1) *
-        (game.intermission > 0 ? 0.25 : 1),
-    );
-    R.render(game.time, {
-      hurt: player.hurtFx,
-      flash: player.flashFx,
-      slow: scale < 1 ? 1 : 0,
-      lowHp: player.alive && player.hp < 30 ? 1 - player.hp / 30 : 0,
-    });
-  }
-
   function step(now) {
     // Preserve the original variable step and its 50 ms cap; changing integration would change feel.
     const dt = Math.min(0.05, (now - last) / 1000);
@@ -209,16 +130,13 @@ export function createLoop(runtime, actions = {}) {
     input.update(dt);
     const st = game.state;
     const playing = st === 'play' || st === 'dying';
-    handleMenuInput(st);
-    updateMusicInput();
-    updateBoard(playing);
-    updateCursorHint(st, dt);
+    interaction.update(st, playing, dt);
     const scale = timeScale(dt);
     if (st === 'play' && !online()) updateFocus(dt);
     else endFocus();
     if (playing) updateSimulation(st, dt, dt * scale);
     else updateIdle(st, dt);
-    present(playing, dt, scale);
+    presentation.present(playing, dt, scale);
   }
 
   let running = false,
