@@ -183,6 +183,7 @@ export function createApplication(options: ApplicationOptions) {
     respawnLocal: () => match.respawnLocal(),
   });
   const settingsPanel = new SettingsPanel(runtime.state, runtime.userSettings);
+  runtime.hud.onScreenChange = () => settingsPanel.close();
   const screens = new ScreenController({
     navigation: runtime.state,
     profile: runtime.state,
@@ -308,6 +309,13 @@ export function createApplication(options: ApplicationOptions) {
       online: runtime.online,
       level: () => runtime.state.level,
       musicWanted: () => runtime.state.musicWanted,
+      stats: {
+        enabled: () => runtime.state.nerdStats,
+        ping: () => {
+          const ping = runtime.net.getNerdPing?.() ?? { value: null, label: 'N/A' };
+          return runtime.online() ? ping : { value: null, label: 'N/A' };
+        },
+      },
       audioReady: () => !!audio.ctx,
       remoteCount: () => runtime.remote.size,
       clearBoss: () => {
@@ -316,6 +324,7 @@ export function createApplication(options: ApplicationOptions) {
       toggleMusic: () => runtime.userSettings.toggleMusic(),
       boardVisible: () => !runtime.hud.el.board.hidden,
       screenClick: () => runtime.hud.onScreenClick?.(),
+      settingsOpen: () => settingsPanel.open,
     },
     {
       resume: (...args) => session.resume(...args),
@@ -342,6 +351,8 @@ export function createApplication(options: ApplicationOptions) {
     disposed = true;
     loop.stop();
     screens.dispose();
+    settingsPanel.close();
+    runtime.hud.onScreenChange = null;
     controls.dispose();
     session.dispose();
     multiplayer.dispose();

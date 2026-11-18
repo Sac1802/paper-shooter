@@ -1,5 +1,12 @@
 # Paper Shooter
 
+> **Project provenance:** Paper Shooter is an independent continuation based on source recovered
+> from [iifor/doodleshooter](https://github.com/iifor/doodleshooter). The preserved history credits
+> **Evan Milenko** as the original creator of Doodle Shooter. It is possible that the iifor
+> repository preserves an earlier copy of Evan's project. See [Evan's original
+> showcase](https://x.com/EvanMilenko/status/2097514352869884163).
+> For a separate fanwork exploring the visual style, see [Doodle Games](https://doodle.ckgrafico.com/);
+
 A first-person survival shooter drawn in blue ballpoint on lined notebook paper. Grapple across
 rooftops and canyons, slice bullets back at the doodles that fired them, lob grenades, and see how
 many waves you can survive. Play alone, survive with friends, or fight them.
@@ -21,7 +28,7 @@ Open http://127.0.0.1:5173. Development reloads game code and styles through Vit
 `pnpm build:client` produces `dist/` for any static HTTPS host. Solo and STUN-only multiplayer
 need no project API; temporary TURN credentials can use the optional Node/Vercel adapter.
 
-For the existing VPS workflow, configure `.env.example` and use `docker compose up --build -d`.
+For Docker-based deployment, configure `.env.example` and use `docker compose up --build -d`.
 See [deployment](docs/deployment.md) for static hosting, Vercel, nonroot container targets and the
 migration from the previous two-container deployment. [Development](docs/development.md) also
 covers the optional container environment.
@@ -48,6 +55,9 @@ the frontend at another HTTPS provider adapter. See [networking](docs/networking
 [.env.example](.env.example) for the public/private variables and deployment defaults.
 
 ## Controls
+
+These are the default keyboard and controller bindings. Keyboard and mouse bindings can be changed
+in-game under **Settings & Controls**; the in-game guide follows the active configuration.
 
 | Action                          | Mouse + keyboard        | PS5 controller       |
 | ------------------------------- | ----------------------- | -------------------- |

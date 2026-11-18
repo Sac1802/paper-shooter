@@ -1,9 +1,12 @@
+import { escapeHtml } from './html.js';
 import { KB_KEYS, PAD_KEYS } from './input-guide.js';
 export { KB_KEYS, PAD_KEYS, CONTROLS_HTML } from './input-guide.js';
 // DOM heads-up display drawn in "pen" style (multiplied over the paper canvas).
 export class HUD {
-  constructor(root) {
+  /** @param {((action: string) => string) | null} [keyLabel] */
+  constructor(root, keyLabel = null) {
     this.root = root;
+    this.keyLabel = keyLabel;
     root.innerHTML = `
       <div class="scope" id="scope"><div class="mask"></div><div class="ring"></div><div class="cx"></div><div class="cy"></div><div class="dot"></div></div>
       <div class="focus-meter" id="focusmeter"><div class="fm-label">KATANA</div><div class="fm-tube"><div class="fm-fill" id="fmfill"></div><i class="fm-f1"></i><i class="fm-f2"></i><i class="fm-f3"></i></div><div class="fm-ready" id="fmready">SLASH READY</div></div>
@@ -12,7 +15,7 @@ export class HUD {
       <div class="grapple-ret" id="gret"></div><div class="gstam" id="gstam" hidden><i id="gstamfill"></i></div>
       <div class="hitmarker" id="hitmarker"><i></i><i></i></div>
       <div class="dmg-ind" id="dmg"></div>
-      <div class="hud-tl"><div class="score">SCORE <b id="score">0</b></div><div class="combo" id="combo"></div></div>
+      <div class="hud-tl"><div class="score">SCORE <b id="score">0</b></div><div class="nerd-stats" id="nerdStats" hidden aria-live="off"></div><div class="combo" id="combo"></div></div>
       <div class="hud-tr"><div class="wave">WAVE <b id="wave">1</b></div><div class="modifier" id="modifier"></div><div class="left"><b id="left">0</b> enemies left</div><div class="timer" id="timer"></div><div class="pvpscore" id="pvpscore" hidden></div></div><div class="board" id="board" hidden></div>
       <div class="bossbar" id="bossbar"><div class="bossname" id="bossname"></div><div class="bar big"><div class="fill red" id="bossfill"></div></div></div>
       <div class="hud-bl">
@@ -64,6 +67,7 @@ export class HUD {
       board: q('board'),
       gstam: q('gstam'),
       gstamfill: q('gstamfill'),
+      nerdStats: q('nerdStats'),
     };
     this._msgT = 0;
     this._scope = false;
@@ -78,9 +82,15 @@ export class HUD {
     this._ads = false;
     this._mode = '';
     this.onScreenClick = null;
+    this.onScreenChange = null;
     this._tipT = 0;
+    this._nerdStatsText = '';
     this.el.screen.addEventListener('click', () => {
       if (this.onScreenClick) this.onScreenClick();
+    });
+    this.el.screen.addEventListener('keydown', (event) => {
+      if (event.target instanceof HTMLButtonElement && (event.key === 'Enter' || event.key === ' '))
+        event.stopPropagation();
     });
   }
   // katana charge gauge: fills with katana kills, catches fire when a focus slash is ready
@@ -120,7 +130,9 @@ export class HUD {
     if (this.onDevice) this.onDevice(pad);
   }
   key(action) {
-    return (this._pad ? PAD_KEYS : KB_KEYS)[action] || action;
+    if (this._pad) return PAD_KEYS[action] || action;
+    const dynamic = this.keyLabel?.(action);
+    return (dynamic && dynamic !== action ? dynamic : KB_KEYS[action]) || action;
   }
   setScope(on) {
     if (on === this._scope) return;
@@ -190,13 +202,21 @@ export class HUD {
     }
   }
   setSlots(slots) {
-    const key = slots.map((s) => `${s.name}|${s.active ? 1 : 0}|${s.ammo}`).join(';');
+    const labels = slots.map((_, i) => {
+      const number = String(i + 1);
+      const action = 'slot' + number;
+      const binding = this.keyLabel?.(action);
+      return binding && binding !== action ? binding : number;
+    });
+    const key = slots
+      .map((s, i) => `${s.name}|${s.active ? 1 : 0}|${s.empty ? 1 : 0}|${s.ammo}|${labels[i]}`)
+      .join(';');
     if (key === this._lastSlots) return;
     this._lastSlots = key;
     this.el.slots.innerHTML = slots
       .map(
         (s, i) =>
-          `<div class="slot${s.active ? ' active' : ''}${s.empty ? ' empty' : ''}"><span class="num">${i + 1}</span>${s.name}<span class="sammo">${s.ammo}</span></div>`,
+          `<div class="slot${s.active ? ' active' : ''}${s.empty ? ' empty' : ''}"><span class="num">${escapeHtml(labels[i])}</span>${s.name}<span class="sammo">${s.ammo}</span></div>`,
       )
       .join('');
   }
@@ -279,14 +299,27 @@ export class HUD {
     setTimeout(() => i.remove(), 1000);
   }
   showScreen(html) {
+    this.onScreenChange?.();
     this.el.panel.innerHTML = html;
     this.el.screen.classList.add('show');
   }
   hideScreen() {
+    this.onScreenChange?.();
     this.el.screen.classList.remove('show');
   }
   setGameplayVisible(v) {
     this.root.classList.toggle('nogame', !v);
+  }
+  setNerdStatsVisible(visible) {
+    this.el.nerdStats.hidden = !visible;
+  }
+  setNerdStats(fps, ping, label) {
+    const fpsText = fps == null ? '--' : Math.round(fps).toString();
+    const pingText = ping == null ? '--' : ping.toFixed(1);
+    const text = `FPS ${fpsText} · PING ${label} ${pingText} ms`;
+    if (text === this._nerdStatsText) return;
+    this._nerdStatsText = text;
+    this.el.nerdStats.textContent = text;
   }
   update(dt) {
     if (this._msgT > 0) {

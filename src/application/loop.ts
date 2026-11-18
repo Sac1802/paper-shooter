@@ -9,6 +9,8 @@ export class GameLoop {
   private running = false;
   private frameId = 0;
   private stopBackground: (() => void) | null = null;
+  private statsStartedAt: number | null = null;
+  private statsFrames = 0;
   constructor(private readonly ports: LoopPorts) {
     this.last = ports.scheduling.now();
   }
@@ -32,6 +34,38 @@ export class GameLoop {
     this.ports.scheduling.cancel(this.frameId);
     this.stopBackground?.();
     this.stopBackground = null;
+    this.statsStartedAt = null;
+    this.statsFrames = 0;
+  }
+  private sampleNerdStats(now: number) {
+    const stats = this.ports.stats;
+    const phase = this.ports.game.state;
+    if (!stats?.enabled() || (phase !== 'play' && phase !== 'dying')) {
+      this.statsStartedAt = null;
+      this.statsFrames = 0;
+      return;
+    }
+    if (this.statsStartedAt == null) {
+      this.statsStartedAt = now;
+      this.statsFrames = 0;
+      const ping = stats.ping();
+      this.ports.hud.setNerdStats?.(null, ping.value, ping.label);
+      return;
+    }
+    const elapsed = now - this.statsStartedAt;
+    if (elapsed > 2500) {
+      this.statsStartedAt = now;
+      this.statsFrames = 0;
+      const ping = stats.ping();
+      this.ports.hud.setNerdStats?.(null, ping.value, ping.label);
+      return;
+    }
+    this.statsFrames++;
+    if (elapsed < 1000) return;
+    const ping = stats.ping();
+    this.ports.hud.setNerdStats?.((this.statsFrames * 1000) / elapsed, ping.value, ping.label);
+    this.statsStartedAt = now;
+    this.statsFrames = 0;
   }
   step(now: number) {
     const { game, input, online, interaction, presentation, actions } = this.ports;
@@ -48,6 +82,7 @@ export class GameLoop {
     if (playing) this.simulate(phase, dt, dt * scale);
     else this.idle(phase, dt);
     presentation.present(playing, dt, scale);
+    if (this.running) this.sampleNerdStats(now);
   }
   private timeScale(dt: number) {
     const { game } = this.ports;

@@ -124,6 +124,59 @@ describe('PeerJS lobby transport', () => {
     expect(b.connected).toBe(false);
   });
 
+  it('measures active peer round trips and clears samples when disabled or disconnected', async () => {
+    vi.useFakeTimers();
+    const { client } = setup();
+    const host = client();
+    const guest = client();
+    await host.host({ code: 'PING1' });
+    await guest.join('PING1');
+    host.setNerdStatsEnabled(true);
+    guest.setNerdStatsEnabled(true);
+    await vi.advanceTimersByTimeAsync(1500);
+    await flushMessages();
+    expect(host.getNerdPing().label).toBe('PEERS MEDIAN · 1');
+    expect(host.getNerdPing().value).not.toBeNull();
+    expect(guest.getNerdPing().label).toBe('HOST');
+    expect(guest.getNerdPing().value).not.toBeNull();
+    host.setNerdStatsEnabled(false);
+    expect(host.getNerdPing().value).toBeNull();
+    guest.leave();
+    expect(host.getNerdPing().label).toBe('PEERS MEDIAN · 0');
+  });
+  it('answers only valid probes on open channels and ignores unmatched RTT replies', async () => {
+    const { client } = setup();
+    const host = client();
+    const guest = client();
+    await host.host({ code: 'PING2' });
+    await guest.join('PING2');
+    const connection = host.conns.get(guest.id);
+    const send = vi.spyOn(connection, 'send');
+
+    host._handleStatsPing(connection, { kind: 'ping', id: 1 });
+    expect(send).toHaveBeenCalledWith({ t: 'paper:nerd-stats', kind: 'pong', id: 1 });
+    connection.open = false;
+    host._handleStatsPing(connection, { kind: 'ping', id: 2 });
+    host._handleStatsPing(connection, { kind: 'other', id: 3 });
+    host._handleStatsPing(connection, { kind: 'pong', id: 4 });
+    host._handleStatsPing(connection, { kind: 'pong', id: Number.MAX_SAFE_INTEGER + 1 });
+    expect(send).toHaveBeenCalledOnce();
+    expect(host.pingSamples.size).toBe(0);
+  });
+  it('uses a fresh median across host peers and discards stale RTT samples', async () => {
+    const { client } = setup();
+    const host = client();
+    await host.host({ code: 'MEDIAN' });
+    const now = host._now();
+    host.pingSamples.set('a', { value: 10, at: now });
+    host.pingSamples.set('b', { value: 20, at: now });
+    expect(host.getNerdPing()).toEqual({ value: 15, label: 'PEERS MEDIAN · 2' });
+    host.pingSamples.set('b', { value: 20, at: now - 6000 });
+    expect(host.getNerdPing()).toEqual({ value: 10, label: 'PEERS MEDIAN · 1' });
+    host.connected = false;
+    expect(host.getNerdPing()).toEqual({ value: null, label: 'PEERS MEDIAN' });
+  });
+
   it('finds public lobbies without joining and lets quick play seat a player', async () => {
     vi.useFakeTimers();
     const { client } = setup();

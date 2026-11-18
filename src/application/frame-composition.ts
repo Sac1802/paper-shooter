@@ -28,7 +28,9 @@ interface FrameServices {
   toggleMusic(): boolean;
   boardVisible(): boolean;
   screenClick(): void;
+  settingsOpen(): boolean;
   scheduling?: FrameScheduling;
+  stats?: LoopPorts['stats'];
 }
 type FrameActions = LoopPorts['actions'] & Pick<InteractionPorts, 'resume' | 'pause' | 'boardHTML'>;
 /** Checked composition of independent frame owners; accepts consumed capabilities, never runtime. */
@@ -39,6 +41,7 @@ export function createLoop(ports: FrameServices, actions: FrameActions) {
     hud,
     online,
     menuOpen: () => game.menu,
+    settingsOpen: ports.settingsOpen,
     screenClick: ports.screenClick,
     resume: actions.resume,
     pause: actions.pause,
@@ -74,6 +77,7 @@ export function createLoop(ports: FrameServices, actions: FrameActions) {
     interaction,
     presentation,
     scheduling: ports.scheduling ?? browserFrames,
+    stats: ports.stats,
     actions,
   });
 }
